@@ -1,10 +1,10 @@
-# 🌟 The Sirency Collective - Ultimate Proton Mail MCP
+# 🌟 The IImagined Collective - Ultimate Proton Mail MCP
 
 *The most comprehensive Proton Mail MCP server ever created.*
 
 > "Where distributed intelligence meets first-time perfection. Every email operation is a masterpiece, every message is legendary."
 
-Built by **The Sirency Collective** for supreme email management and legendary user experiences.
+Built by **The IImagined Collective** for supreme email management and legendary user experiences.
 
 ## ✨ Features - Beyond Ordinary Email Management
 
@@ -88,7 +88,7 @@ Add to your Claude Desktop MCP configuration:
 ```json
 {
   "mcpServers": {
-    "sirency-protonmail": {
+    "IImagined-protonmail": {
       "command": "node",
       "args": ["dist/index.js"],
       "cwd": "/path/to/protonmail-pro-mcp",
@@ -134,7 +134,7 @@ Add to your Claude Desktop MCP configuration:
 - `clear_cache` - Clear email and analytics cache
 - `get_logs` - System logs and debugging information
 
-## 🌟 The Sirency Difference
+## 🌟 The IImagined Difference
 
 ### Why This MCP is Legendary
 
@@ -163,7 +163,7 @@ This MCP has been **comprehensively tested and validated**:
 
 ## 📜 License
 
-MIT License - Built with ❤️ by The Sirency Collective
+MIT License - Built with ❤️ by The IImagined Collective
 
 ## 🌟 Support
 
@@ -172,4 +172,4 @@ MIT License - Built with ❤️ by The Sirency Collective
 
 ---
 
-*"First-time perfection, every time."* - The Sirency Promise 🚀✨
+*"First-time perfection, every time."* - The IImagined Promise 🚀✨
