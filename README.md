@@ -4,24 +4,33 @@ Proton Mail Bridge MCP: professional Proton Mail management with 20+ tools, adva
 
 Current published GitHub repository: `googlarz/proton-mail-bridge-mcp`
 
-`Proton Mail Bridge MCP` is a production-oriented MCP server for people who want Claude to work with Proton Mail in a way that is actually useful day to day, not just technically connected. It uses Proton Bridge for IMAP and SMTP, adds a local SQLite index for faster follow-up work, and exposes tools for reading, drafting, sending, attachments, and mailbox actions.
+If you use Claude Desktop and Proton Mail, this project gives Claude a practical way to work with your Proton mailbox through Proton Bridge.
+
+The easiest way to think about setup is:
+
+1. install `Proton Mail Bridge MCP` on your computer
+2. connect it to Claude Desktop
+
+You do not need to understand MCP internals to use it. If Proton Bridge is already working on your machine, the normal Claude Desktop setup is only a few steps.
 
 ## Why This Exists
 
 Claude has a native Gmail connector, but there is no native Proton Mail connector today. This project closes that gap for Proton users.
 
-Where it is strong:
+I built it after `protonmail-pro-mcp` showed there was real demand for this idea, but I wanted a version that was more complete, better tested, and easier to use day to day.
+
+What it is good at:
 
 - Real Proton support through Proton Bridge.
 - Read plus write operations: drafts, send, reply, forward, archive, trash, restore.
 - Attachment content access and file saving.
 - Local indexing, thread triage, follow-up views, and background refresh.
 
-Where it is not native:
+What to expect:
 
-- It still requires a local MCP server and Proton Bridge.
-- It cannot become a first-party Claude connector from inside this repository.
-- It cannot produce true Proton webmail deep links from IMAP alone.
+- It runs locally on your machine alongside Proton Bridge.
+- It plugs into Claude Desktop, but it is not a first-party Claude connector.
+- Source links come from the MCP layer, not native Proton webmail links.
 
 ## What It Does
 
@@ -37,67 +46,31 @@ Where it is not native:
 - Generates actionable thread views, inbox digests, and follow-up candidates.
 - Emits MCP resource links and structured source metadata for downstream citation-style rendering.
 
-## What It Does Not Do
+## Good To Know
 
-- It does not bypass Proton Bridge.
-Why: Proton Mail does not currently offer a native first-party Claude connector path here; this server depends on the Bridge IMAP/SMTP surface.
+- It uses Proton Bridge.
+Why: this project connects through the local IMAP and SMTP access that Proton Bridge provides.
 
-- It does not become a native Claude product integration.
-Why: first-party auth, citations, and cross-surface connector UX are platform features, not repo features.
+- It runs locally.
+Why: Proton Bridge normally runs on your own machine, so this MCP server is designed to run locally too.
 
-- It does not expose Proton-native conversations or labels from a Proton API.
-Why: threads and labels are reconstructed from IMAP metadata plus the local index.
+- Threads and labels are reconstructed from IMAP data.
+Why: Proton-native thread and label objects are not available here through a first-party Claude connector path.
 
-- It does not guarantee perfect attachment extraction for every MIME shape.
-Why: attachment parsing is broad and live-tested, but MIME edge cases are effectively endless.
+- Attachment handling is broad, but not magic.
+Why: the common cases work well, but email MIME formats can be messy across different senders and clients.
 
-- It does not replace long-running product validation.
-Why: the code is live-tested, but true production confidence still comes from soak time and real mailbox usage.
+## Before You Start
 
-## Compared With Claude's Native Gmail Connector
+You will need:
 
-As of March 24, 2026, the practical comparison looks like this:
+1. Claude Desktop
+2. Node.js 18 or newer
+3. A Proton account
+4. Proton Bridge installed and signed in
+5. About 10 minutes
 
-Here, "local MCP server" means **this MCP server** itself running on your machine, Claude Desktop host, or another machine you control.
-
-| Capability | Native Gmail connector | Proton Mail Bridge MCP |
-| --- | --- | --- |
-| Setup | ✅ First-party OAuth inside Claude | 🔧 Requires Proton Bridge plus **this MCP server** running locally |
-| Search and read | ✅ Native Claude UX with source citations | ✅ Yes, through IMAP plus local indexing |
-| Original-provider links | ✅ Better | 🟡 MCP resource links and locate hints, not true Proton webmail links |
-| Native labels and threads | ✅ Gmail-native | 🟡 Reconstructed from IMAP and the local index |
-| Send email | ❌ No | ✅ Yes, through Proton Bridge SMTP |
-| Draft workflows | ✅ Better first-party UX | ✅ Strong operational control, including remote draft sync |
-| Attachment content | 🟡 Limited | ✅ Can fetch content and save files |
-| Mailbox actions | 🟡 Limited | ✅ Read, star, move, archive, trash, restore, delete, and batch actions |
-| Cross-device Claude availability | ✅ Better | 🟡 Only where this MCP server is installed and running |
-| Auth model | ✅ First-party Google auth | 🔧 Local Proton Bridge credentials |
-
-What Gmail still does better:
-
-- Native Claude setup and UX.
-- Better first-party citations and original-message linking.
-- Provider-native labels and threads.
-- No local Bridge or local MCP process to manage.
-
-What this project does better:
-
-- Works with Proton Mail.
-- Can send mail.
-- Can access attachment content.
-- Can perform real mailbox actions.
-- Can be tuned for power-user and self-hosted workflows.
-
-## Requirements
-
-Before you start, you need:
-
-1. Node.js 18 or newer.
-2. A Proton account.
-3. Proton Bridge installed and signed in.
-4. About 10 minutes.
-
-You will also need these values from Proton Bridge:
+From Proton Bridge, you will need:
 
 - IMAP host
 - IMAP port
@@ -113,9 +86,16 @@ For most local Bridge setups, the defaults are:
 - SMTP host: `127.0.0.1`
 - SMTP port: `1025`
 
-## 🚀 Quick Start
+## 🚀 Setup Overview
 
-If you want the fastest working setup for Claude Desktop, use the local setup wizard. You do not need to paste environment variables by hand for the normal Desktop path.
+Setup has two parts:
+
+1. install the local MCP server
+2. connect it to Claude Desktop
+
+The normal path is the guided setup wizard. The manual path is only for people who want more control.
+
+## Part 1: Install Proton Mail Bridge MCP
 
 ### 1. 🔐 Open Proton Bridge
 
@@ -132,8 +112,6 @@ Keep Proton Bridge running. Do not close it while using this MCP.
 
 ### 2. 📥 Download The Project
 
-There is now a concrete repo rename plan in [RENAME-MIGRATION.md](./RENAME-MIGRATION.md) for moving cleanly from `protonmail-pro-mcp` to `proton-mail-bridge-mcp`.
-
 ```bash
 git clone https://github.com/googlarz/proton-mail-bridge-mcp.git
 cd proton-mail-bridge-mcp
@@ -141,6 +119,10 @@ npm install
 ```
 
 If `npm` does not exist on your machine, install Node.js 18+ first, then run the commands again.
+
+At this point, the MCP server files are on your computer and ready for the Claude Desktop step.
+
+## Part 2: Connect It To Claude Desktop
 
 ### 3. 🪄 Run The Claude Desktop Setup Wizard
 
@@ -167,20 +149,18 @@ After the wizard finishes:
 
 ## 🤖 Claude Desktop Setup
 
-If you use Claude Desktop, read this first:
+If you already have Claude Desktop open, this is the one thing to know first:
 
-- The `Remote MCP server URL` field is for a hosted connector that Claude Desktop can reach over the internet.
-- This project is different: it talks to Proton Bridge on your own machine, usually on `127.0.0.1`.
-- Because Proton Bridge is local, **this MCP server** is also designed to run locally and talk to Claude Desktop over `stdio`.
-- That is why there is no ready-made remote URL to paste into that screen from this repo today.
+- Claude Desktop also supports remote connectors that ask for a URL.
+- This project is not that kind of connector.
+- It works locally, because Proton Bridge also works locally on your machine.
+- So the right setup here is the local Claude Desktop install flow, not the remote URL box.
 
-So the supported Claude Desktop path in `v3.7` is local-first:
+That means the supported Claude Desktop path in `v3.7` is:
 
 - `npm run setup:claude-desktop` for the guided zero-manual-config flow
 - `npm run install:claude-desktop` for env-driven or automated installs
 - the `.mcpb` local extension track documented in [CLAUDE-DESKTOP-PACKAGING.md](./CLAUDE-DESKTOP-PACKAGING.md)
-
-If you want a true remote URL later, that requires a different deployment model, not just a different config field, because the mail access currently depends on your local Proton Bridge session.
 
 ### Zero-Manual-Config Path For Bridge Users
 
@@ -192,16 +172,28 @@ npm run setup:claude-desktop
 ```
 
 3. Answer the prompts for:
-   - Proton Bridge username
-   - Proton Bridge password
+   - your Proton Bridge username
+   - your Proton Bridge password
    - whether you want to use the standard local Bridge ports
-   - local data directory
+   - where you want the local data stored
 4. Restart Claude Desktop.
 5. Open Claude and check that the Proton Mail Bridge MCP tools are available.
 
 This is the easiest path because it avoids manual JSON edits and avoids manual environment-variable setup.
 
-### Power-User Local Install
+### What `npm run install:claude-desktop` Is For
+
+`npm run install:claude-desktop` is for Claude Desktop.
+
+More specifically, it is the advanced installer that registers this MCP server inside Claude Desktop.
+
+Use it when:
+
+- you want a scriptable install
+- you already manage your own `PROTONMAIL_*` environment variables
+- you do not want to use the interactive wizard
+
+### Advanced Local Install
 
 If you prefer to control the env yourself, or if you want a more scriptable setup, use the installer command below.
 
@@ -314,6 +306,40 @@ If you prefer to edit the config yourself, add an entry like this to Claude Desk
 - If credentials or Bridge ports change, reinstall or update the config.
 - If you want safer local storage, prefer `*_FILE` or `*_COMMAND` over raw secrets in config.
 - If something still does not work, run `npm run smoke:bridge` in Terminal first. If that fails, Claude Desktop will fail too.
+
+## Compared With Claude's Native Gmail Connector
+
+As of March 24, 2026, the practical comparison looks like this:
+
+Here, "local MCP server" means **this MCP server** itself running on your machine, Claude Desktop host, or another machine you control.
+
+| Capability | Native Gmail connector | Proton Mail Bridge MCP |
+| --- | --- | --- |
+| Setup | ✅ First-party OAuth inside Claude | 🔧 Requires Proton Bridge plus **this MCP server** running locally |
+| Search and read | ✅ Native Claude UX with source citations | ✅ Yes, through IMAP plus local indexing |
+| Original-provider links | ✅ Better | 🟡 MCP resource links and locate hints, not true Proton webmail links |
+| Native labels and threads | ✅ Gmail-native | 🟡 Reconstructed from IMAP and the local index |
+| Send email | ❌ No | ✅ Yes, through Proton Bridge SMTP |
+| Draft workflows | ✅ Better first-party UX | ✅ Strong operational control, including remote draft sync |
+| Attachment content | 🟡 Limited | ✅ Can fetch content and save files |
+| Mailbox actions | 🟡 Limited | ✅ Read, star, move, archive, trash, restore, delete, and batch actions |
+| Cross-device Claude availability | ✅ Better | 🟡 Only where this MCP server is installed and running |
+| Auth model | ✅ First-party Google auth | 🔧 Local Proton Bridge credentials |
+
+What Gmail still does better:
+
+- Native Claude setup and UX.
+- Better first-party citations and original-message linking.
+- Provider-native labels and threads.
+- No local Bridge or local MCP process to manage.
+
+What this project does better:
+
+- Works with Proton Mail.
+- Can send mail.
+- Can access attachment content.
+- Can perform real mailbox actions.
+- Can be tuned for power-user and self-hosted workflows.
 
 ## Tool Surface
 
