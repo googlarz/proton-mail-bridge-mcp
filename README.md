@@ -1,8 +1,6 @@
 # Proton Mail Bridge MCP
 
-Proton Mail Bridge MCP: professional Proton Mail management with 20+ tools, advanced analytics, and seamless Proton Bridge integration.
-
-Current published GitHub repository: `googlarz/proton-mail-bridge-mcp`
+🌉 Proton Mail Bridge MCP - Professional Proton Mail management with 20+ tools, advanced analytics, and seamless Proton Bridge integration.
 
 If you use Claude Desktop and Proton Mail, this project gives Claude a practical way to work with your Proton mailbox through Proton Bridge.
 
@@ -17,7 +15,7 @@ You do not need to understand MCP internals to use it. If Proton Bridge is alrea
 
 Claude has a native Gmail connector, but there is no native Proton Mail connector today. This project closes that gap for Proton users.
 
-I built it after `protonmail-pro-mcp` showed there was real demand for this idea, but I wanted a version that was more complete, better tested, and easier to use day to day.
+The original `protonmail-pro-mcp` idea was genuinely promising, but the codebase I started from was not usable as-is. I rebuilt it into a working MCP server, implemented the missing pieces, and added a long list of improvements so it is actually useful day to day.
 
 What it is good at:
 
@@ -60,6 +58,20 @@ Why: Proton-native thread and label objects are not available here through a fir
 - Attachment handling is broad, but not magic.
 Why: the common cases work well, but email MIME formats can be messy across different senders and clients.
 
+## What Is Still Missing, And Why
+
+- No remote URL connector out of the box.
+Why: the current product talks to Proton Bridge on your own machine, and Proton Bridge is normally local, not a hosted service.
+
+- No first-party Claude auth flow or native Proton deep links.
+Why: those require platform-level support from Anthropic and richer provider support from Proton than IMAP and SMTP can offer.
+
+- No true Proton-native conversation model.
+Why: this project reconstructs threads and labels from Bridge mail data instead of calling a richer Proton-specific API.
+
+- A more native Proton experience is still possible later.
+Why: if Proton ships a better public integration path, or a cleaner local/hosted bridge story, this project can get closer to the native Gmail experience. I am waiting for that ecosystem to improve.
+
 ## Before You Start
 
 You will need:
@@ -95,7 +107,7 @@ Setup has two parts:
 
 The normal path is the guided setup wizard. The manual path is only for people who want more control.
 
-## Part 1: Install Proton Mail Bridge MCP
+## Part 1: Install Proton Mail Bridge MCP On Your Computer
 
 ### 1. 🔐 Open Proton Bridge
 
@@ -122,21 +134,26 @@ If `npm` does not exist on your machine, install Node.js 18+ first, then run the
 
 At this point, the MCP server files are on your computer and ready for the Claude Desktop step.
 
-## Part 2: Connect It To Claude Desktop
+## Part 2: Tell Claude Desktop To Use It
 
-### 3. 🪄 Run The Claude Desktop Setup Wizard
+### 3. 🪄 Set Up Proton Mail Bridge MCP For Claude Desktop
 
 ```bash
 npm run setup:claude-desktop
 ```
 
-The wizard does the normal Claude Desktop install for you:
+This command does not install the Claude Desktop app itself.
+
+Claude Desktop should already be installed.
+
+What this command does is:
 
 - checks the standard Proton Bridge local ports
 - asks for your Proton Bridge username and Bridge password
 - uses the standard local Bridge addresses unless you override them
-- writes the Claude Desktop MCP entry automatically
-- stores the `PROTONMAIL_*` values inside that local Claude Desktop config
+- builds this MCP server
+- writes the Claude Desktop config entry that tells Claude how to start this MCP server
+- stores the `PROTONMAIL_*` values that this MCP server needs inside that local Claude Desktop config
 - backs up the old Claude Desktop config before changing it
 
 ### 4. 🔁 Restart Claude Desktop
@@ -145,9 +162,12 @@ After the wizard finishes:
 
 - restart Claude Desktop
 - keep Proton Bridge open
-- open Claude and confirm the Proton Mail Bridge MCP tools appear
+- open any chat in Claude Desktop
+- click the `+` button near the chat box, then open `Connectors`
+- confirm that `proton-mail-bridge` appears there and that the tools are available
+- if you want a second check, open Claude Desktop developer settings and look at the MCP connection status/logs
 
-## 🤖 Claude Desktop Setup
+## 🤖 How This Works In Claude Desktop
 
 If you already have Claude Desktop open, this is the one thing to know first:
 
@@ -156,10 +176,17 @@ If you already have Claude Desktop open, this is the one thing to know first:
 - It works locally, because Proton Bridge also works locally on your machine.
 - So the right setup here is the local Claude Desktop install flow, not the remote URL box.
 
-That means the supported Claude Desktop path in `v3.7` is:
+Why there is no remote URL to paste:
+
+- a remote URL connector expects a hosted MCP server
+- this project expects to reach Proton Bridge on your machine
+- Proton Bridge usually exposes local IMAP/SMTP access on `127.0.0.1`
+- so the simplest and safest setup is local, not remote
+
+That means the supported Claude Desktop path in `v1.1` is:
 
 - `npm run setup:claude-desktop` for the guided zero-manual-config flow
-- `npm run install:claude-desktop` for env-driven or automated installs
+- `npm run install:claude-desktop` for advanced or automated Claude Desktop installs
 - the `.mcpb` local extension track documented in [CLAUDE-DESKTOP-PACKAGING.md](./CLAUDE-DESKTOP-PACKAGING.md)
 
 ### Zero-Manual-Config Path For Bridge Users
@@ -181,11 +208,23 @@ npm run setup:claude-desktop
 
 This is the easiest path because it avoids manual JSON edits and avoids manual environment-variable setup.
 
+How to verify it worked:
+
+1. Open Claude Desktop.
+2. Start or open a chat.
+3. Click the `+` button near the message box.
+4. Open `Connectors`.
+5. Look for `proton-mail-bridge`.
+
+If you can see it there, Claude Desktop can see this MCP server.
+
 ### What `npm run install:claude-desktop` Is For
 
 `npm run install:claude-desktop` is for Claude Desktop.
 
 More specifically, it is the advanced installer that registers this MCP server inside Claude Desktop.
+
+It does not install Claude Desktop itself.
 
 Use it when:
 
