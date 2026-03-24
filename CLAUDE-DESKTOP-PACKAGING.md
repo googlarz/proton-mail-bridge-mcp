@@ -18,6 +18,7 @@ That wizard:
 
 - asks for your Proton Bridge username and Bridge password
 - assumes the standard local Bridge ports unless you override them
+- installs a stable local runtime copy for Claude Desktop outside your repo checkout
 - writes a `proton-mail-bridge` MCP entry into Claude Desktop's local config
 - stores the matching `PROTONMAIL_*` values in that config
 - backs up any previous Claude Desktop config before changing it
@@ -31,6 +32,8 @@ npm run install:claude-desktop
 ```
 
 That keeps the same local-first `stdio` model, but lets you drive installation from your own shell or automation.
+
+In both cases, Claude Desktop ends up pointing at a stable local runtime on the machine, not at the temporary folder where you happened to run the installer.
 
 ## Why There Is Still No Remote URL
 

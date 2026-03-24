@@ -6,6 +6,7 @@ import {
   collectInstallEnv,
   mergeClaudeDesktopConfig,
   resolveClaudeDesktopConfigPath,
+  resolveClaudeDesktopRuntimeDir,
 } from "../dist/scripts/install-claude-desktop.js";
 
 test("collectInstallEnv keeps only PROTONMAIL_* and DEBUG keys", () => {
@@ -37,6 +38,17 @@ test("buildClaudeDesktopServerConfig points Claude Desktop at dist/index.js", ()
   assert.equal(serverConfig.env.PROTONMAIL_USERNAME_FILE, "/run/secrets/user");
 });
 
+test("buildClaudeDesktopServerConfig prefers a dedicated runtime directory when provided", () => {
+  const { serverConfig } = buildClaudeDesktopServerConfig({
+    cwd: "/tmp/source-repo",
+    runtimeDir: "/tmp/proton-runtime",
+    command: "/usr/local/bin/node",
+  });
+
+  assert.deepEqual(serverConfig.args, ["/tmp/proton-runtime/dist/index.js"]);
+  assert.equal(serverConfig.cwd, "/tmp/proton-runtime");
+});
+
 test("mergeClaudeDesktopConfig preserves existing servers", () => {
   const merged = mergeClaudeDesktopConfig(
     {
@@ -64,4 +76,9 @@ test("mergeClaudeDesktopConfig preserves existing servers", () => {
 test("resolveClaudeDesktopConfigPath honors explicit paths", () => {
   const resolved = resolveClaudeDesktopConfigPath(join("/tmp", "claude.json"));
   assert.equal(resolved, "/tmp/claude.json");
+});
+
+test("resolveClaudeDesktopRuntimeDir honors explicit paths", () => {
+  const resolved = resolveClaudeDesktopRuntimeDir(join("/tmp", "proton-runtime"));
+  assert.equal(resolved, "/tmp/proton-runtime");
 });

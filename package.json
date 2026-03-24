@@ -1,6 +1,6 @@
 {
   "name": "@sirency/protonmail-pro-mcp",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "🌉 Proton Mail Bridge MCP - Professional Proton Mail management with 20+ tools, advanced analytics, and seamless Proton Bridge integration.",
   "type": "module",
   "main": "dist/index.js",

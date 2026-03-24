@@ -185,7 +185,7 @@ async function main(): Promise<void> {
   }
 
   output.write(
-    "This wizard writes a local Claude Desktop MCP entry for Proton Mail Bridge MCP. It does not create a remote URL connector.\n\n",
+    "This wizard installs Proton Mail Bridge MCP for Claude Desktop on this computer. It stages a stable local runtime for Claude Desktop to use across chats and workspaces. It does not create a remote URL connector.\n\n",
   );
 
   const rl = createInterface({ input, output });
@@ -241,6 +241,7 @@ async function main(): Promise<void> {
 
     output.write("\nClaude Desktop setup complete.\n");
     output.write(`- Config written to: ${result.configPath}\n`);
+    output.write(`- Claude Desktop runtime installed at: ${result.runtimeDir}\n`);
     if (result.backupPath) {
       output.write(`- Previous config backup: ${result.backupPath}\n`);
     }

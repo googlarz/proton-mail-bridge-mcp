@@ -1,10 +1,13 @@
-import { access, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
+import { access, copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 const DEFAULT_SERVER_NAME = "proton-mail-bridge";
+const execFileAsync = promisify(execFile);
 
 export interface ClaudeDesktopServerConfig {
   command: string;
@@ -17,9 +20,11 @@ export interface InstallOptions {
   configPath?: string;
   serverName?: string;
   cwd?: string;
+  runtimeDir?: string;
   command?: string;
   includeEnv?: boolean;
   env?: Record<string, string>;
+  useRepoRuntime?: boolean;
 }
 
 function parseCliArgs(argv: string[]): InstallOptions {
@@ -51,12 +56,22 @@ function parseCliArgs(argv: string[]): InstallOptions {
         options.cwd = next;
         index += 1;
         break;
+      case "--runtime-dir":
+        if (!next) {
+          throw new Error("--runtime-dir requires a value.");
+        }
+        options.runtimeDir = next;
+        index += 1;
+        break;
       case "--command":
         if (!next) {
           throw new Error("--command requires a value.");
         }
         options.command = next;
         index += 1;
+        break;
+      case "--use-repo-build":
+        options.useRepoRuntime = true;
         break;
       case "--no-env":
         options.includeEnv = false;
@@ -81,11 +96,17 @@ function printHelp(): void {
       "Options:",
       "  --config-path <path>  Override Claude Desktop config path",
       "  --server-name <name>  MCP server key to write (default: proton-mail-bridge)",
-      "  --cwd <path>          Repo root to use as the MCP cwd",
+      "  --cwd <path>          Repo root to stage the MCP runtime from",
+      "  --runtime-dir <path>  Stable runtime directory used by Claude Desktop",
       "  --command <path>      Node executable to use (default: current process.execPath)",
+      "  --use-repo-build      Point Claude Desktop at the current repo build instead of a stable runtime copy",
       "  --no-env              Do not copy current PROTONMAIL_* / DEBUG env into config",
     ].join("\n"),
   );
+}
+
+function resolveSourceRepoRoot(explicitPath?: string): string {
+  return resolve(explicitPath || join(dirname(fileURLToPath(import.meta.url)), "..", ".."));
 }
 
 export function resolveClaudeDesktopConfigPath(explicitPath?: string): string {
@@ -108,6 +129,26 @@ export function resolveClaudeDesktopConfigPath(explicitPath?: string): string {
   }
 }
 
+export function resolveClaudeDesktopRuntimeDir(explicitPath?: string): string {
+  if (explicitPath?.trim()) {
+    return resolve(explicitPath);
+  }
+
+  const fromEnv = process.env.PROTONMAIL_CLAUDE_RUNTIME_DIR?.trim();
+  if (fromEnv) {
+    return resolve(fromEnv);
+  }
+
+  switch (process.platform) {
+    case "darwin":
+      return join(homedir(), "Library", "Application Support", "Proton Mail Bridge MCP");
+    case "win32":
+      return join(process.env.APPDATA || join(homedir(), "AppData", "Roaming"), "Proton Mail Bridge MCP");
+    default:
+      return join(homedir(), ".local", "share", "proton-mail-bridge-mcp");
+  }
+}
+
 export function collectInstallEnv(sourceEnv: NodeJS.ProcessEnv = process.env): Record<string, string> {
   return Object.fromEntries(
     Object.entries(sourceEnv).filter(
@@ -119,7 +160,7 @@ export function collectInstallEnv(sourceEnv: NodeJS.ProcessEnv = process.env): R
 export function buildClaudeDesktopServerConfig(
   options: InstallOptions = {},
 ): { serverName: string; serverConfig: ClaudeDesktopServerConfig } {
-  const cwd = resolve(options.cwd || join(dirname(fileURLToPath(import.meta.url)), "..", ".."));
+  const cwd = resolve(options.runtimeDir || options.cwd || resolveSourceRepoRoot());
   const command = options.command || process.execPath;
   const env =
     options.includeEnv === false
@@ -137,6 +178,44 @@ export function buildClaudeDesktopServerConfig(
       cwd,
       ...(env && Object.keys(env).length > 0 ? { env } : {}),
     },
+  };
+}
+
+function getNpmExecutable(): string {
+  return process.platform === "win32" ? "npm.cmd" : "npm";
+}
+
+export async function prepareClaudeDesktopRuntime(options: InstallOptions = {}): Promise<{
+  runtimeDir: string;
+  sourceCwd: string;
+  usedRepoRuntime: boolean;
+}> {
+  const sourceCwd = resolveSourceRepoRoot(options.cwd);
+  const runtimeDir = options.useRepoRuntime ? sourceCwd : resolveClaudeDesktopRuntimeDir(options.runtimeDir);
+
+  if (options.useRepoRuntime || runtimeDir === sourceCwd) {
+    return {
+      runtimeDir,
+      sourceCwd,
+      usedRepoRuntime: true,
+    };
+  }
+
+  await mkdir(runtimeDir, { recursive: true });
+  await rm(join(runtimeDir, "dist"), { recursive: true, force: true });
+  await cp(join(sourceCwd, "dist"), join(runtimeDir, "dist"), { recursive: true, force: true });
+  await copyFile(join(sourceCwd, "package.json"), join(runtimeDir, "package.json"));
+  await copyFile(join(sourceCwd, "package-lock.json"), join(runtimeDir, "package-lock.json"));
+
+  await execFileAsync(getNpmExecutable(), ["ci", "--omit=dev", "--ignore-scripts"], {
+    cwd: runtimeDir,
+    env: process.env,
+  });
+
+  return {
+    runtimeDir,
+    sourceCwd,
+    usedRepoRuntime: false,
   };
 }
 
@@ -194,10 +273,17 @@ export async function installClaudeDesktopConfig(options: InstallOptions = {}): 
   backupPath?: string;
   serverName: string;
   serverConfig: ClaudeDesktopServerConfig;
+  runtimeDir: string;
+  sourceCwd: string;
+  usedRepoRuntime: boolean;
 }> {
   const configPath = resolveClaudeDesktopConfigPath(options.configPath);
   const existing = await readExistingConfig(configPath);
-  const { serverName, serverConfig } = buildClaudeDesktopServerConfig(options);
+  const runtime = await prepareClaudeDesktopRuntime(options);
+  const { serverName, serverConfig } = buildClaudeDesktopServerConfig({
+    ...options,
+    runtimeDir: runtime.runtimeDir,
+  });
   const merged = mergeClaudeDesktopConfig(existing, serverName, serverConfig);
 
   await mkdir(dirname(configPath), { recursive: true });
@@ -209,6 +295,9 @@ export async function installClaudeDesktopConfig(options: InstallOptions = {}): 
     backupPath,
     serverName,
     serverConfig,
+    runtimeDir: runtime.runtimeDir,
+    sourceCwd: runtime.sourceCwd,
+    usedRepoRuntime: runtime.usedRepoRuntime,
   };
 }
 

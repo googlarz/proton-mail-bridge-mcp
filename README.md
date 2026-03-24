@@ -4,6 +4,8 @@
 
 If you use Claude Desktop and Proton Mail, this project gives Claude a practical way to work with your Proton mailbox through Proton Bridge.
 
+After setup, Claude Desktop uses a stable local install of this MCP on your computer. It is not limited to one repo, one workspace, or one chat folder.
+
 The easiest way to think about setup is:
 
 1. install `Proton Mail Bridge MCP` on your computer
@@ -29,6 +31,7 @@ What to expect:
 - It runs locally on your machine alongside Proton Bridge.
 - It plugs into Claude Desktop, but it is not a first-party Claude connector.
 - Source links come from the MCP layer, not native Proton webmail links.
+- Once installed, Claude Desktop can use it across your chats on that computer.
 
 ## What It Does
 
@@ -107,6 +110,12 @@ Setup has two parts:
 
 The normal path is the guided setup wizard. The manual path is only for people who want more control.
 
+Important:
+
+- the repo folder is only needed to install or update the MCP
+- Claude Desktop itself will use a stable machine-wide runtime after setup
+- so this is for general Claude Desktop use on your computer, not only for one project folder
+
 ## Part 1: Install Proton Mail Bridge MCP On Your Computer
 
 ### 1. 🔐 Open Proton Bridge
@@ -134,6 +143,8 @@ If `npm` does not exist on your machine, install Node.js 18+ first, then run the
 
 At this point, the MCP server files are on your computer and ready for the Claude Desktop step.
 
+You can clone the repo anywhere you like. This folder is used for install and updates. Claude Desktop will not stay tied to this folder after the setup finishes.
+
 ## Part 2: Tell Claude Desktop To Use It
 
 ### 3. 🪄 Set Up Proton Mail Bridge MCP For Claude Desktop
@@ -152,9 +163,16 @@ What this command does is:
 - asks for your Proton Bridge username and Bridge password
 - uses the standard local Bridge addresses unless you override them
 - builds this MCP server
-- writes the Claude Desktop config entry that tells Claude how to start this MCP server
+- installs a stable local runtime copy for Claude Desktop outside this repo
+- writes the Claude Desktop config entry that tells Claude how to start that installed runtime
 - stores the `PROTONMAIL_*` values that this MCP server needs inside that local Claude Desktop config
 - backs up the old Claude Desktop config before changing it
+
+So in plain English:
+
+- this command installs or updates the Proton Mail Bridge MCP integration for Claude Desktop on this computer
+- it does not install the Claude Desktop app itself
+- it does not lock Claude to the folder you ran it from
 
 ### 4. 🔁 Restart Claude Desktop
 
@@ -167,6 +185,12 @@ After the wizard finishes:
 - confirm that `proton-mail-bridge` appears there and that the tools are available
 - if you want a second check, open Claude Desktop developer settings and look at the MCP connection status/logs
 
+Where the stable runtime is installed:
+
+- macOS: `~/Library/Application Support/Proton Mail Bridge MCP`
+- Linux: `~/.local/share/proton-mail-bridge-mcp`
+- Windows: `%APPDATA%\\Proton Mail Bridge MCP`
+
 ## 🤖 How This Works In Claude Desktop
 
 If you already have Claude Desktop open, this is the one thing to know first:
@@ -176,6 +200,12 @@ If you already have Claude Desktop open, this is the one thing to know first:
 - It works locally, because Proton Bridge also works locally on your machine.
 - So the right setup here is the local Claude Desktop install flow, not the remote URL box.
 
+Why this is still useful:
+
+- Gmail gets the most native Claude experience today
+- Proton users do not have that same first-party path yet
+- this project gives Claude Desktop a practical local Proton integration right now
+
 Why there is no remote URL to paste:
 
 - a remote URL connector expects a hosted MCP server
@@ -183,7 +213,7 @@ Why there is no remote URL to paste:
 - Proton Bridge usually exposes local IMAP/SMTP access on `127.0.0.1`
 - so the simplest and safest setup is local, not remote
 
-That means the supported Claude Desktop path in `v1.1` is:
+That means the supported Claude Desktop path in the current release is:
 
 - `npm run setup:claude-desktop` for the guided zero-manual-config flow
 - `npm run install:claude-desktop` for advanced or automated Claude Desktop installs
@@ -218,6 +248,8 @@ How to verify it worked:
 
 If you can see it there, Claude Desktop can see this MCP server.
 
+That means it is available for normal Claude Desktop use on this computer, not just inside the repo folder where you ran setup.
+
 ### What `npm run install:claude-desktop` Is For
 
 `npm run install:claude-desktop` is for Claude Desktop.
@@ -225,6 +257,8 @@ If you can see it there, Claude Desktop can see this MCP server.
 More specifically, it is the advanced installer that registers this MCP server inside Claude Desktop.
 
 It does not install Claude Desktop itself.
+
+It uses the same machine-wide runtime approach as the setup wizard.
 
 Use it when:
 
@@ -321,8 +355,8 @@ If you prefer to edit the config yourself, add an entry like this to Claude Desk
   "mcpServers": {
     "proton-mail-bridge": {
       "command": "node",
-      "args": ["/absolute/path/to/proton-mail-bridge-mcp/dist/index.js"],
-      "cwd": "/absolute/path/to/proton-mail-bridge-mcp",
+      "args": ["/absolute/path/to/stable/proton-mail-bridge-runtime/dist/index.js"],
+      "cwd": "/absolute/path/to/stable/proton-mail-bridge-runtime",
       "env": {
         "PROTONMAIL_USERNAME": "your-address@proton.me",
         "PROTONMAIL_PASSWORD": "your-bridge-password",
