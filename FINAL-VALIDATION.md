@@ -3,7 +3,7 @@
 **Audit date:** 2026-03-24  
 **Repository:** `googlarz/proton-mail-bridge-mcp`  
 **Product:** `Proton Mail Bridge MCP`  
-**Version:** 3.6.0
+**Version:** 3.7.0
 
 ## Summary
 
@@ -13,7 +13,7 @@ The repository previously claimed a fully implemented MCP server, but the commit
 - six imported modules were missing from git
 - there was no `CallTool` handler, only tool metadata
 
-That gap has now been closed with a working TypeScript implementation. The `v3.6` layer adds incremental sync, IMAP IDLE-aware refresh, attachment-text indexing, digest/follow-up tooling, and stronger live verification on top of the prior production hardening work:
+That gap has now been closed with a working TypeScript implementation. The `v3.7` layer adds a local-first Claude Desktop setup wizard, zero-manual-config Desktop onboarding for Bridge users, and a concrete MCP Bundle packaging track on top of the prior runtime and sync hardening work:
 
 - SQLite-backed mailbox indexing instead of JSON-only metadata persistence
 - incremental sync checkpoints per folder with persisted sync state
@@ -23,6 +23,8 @@ That gap has now been closed with a working TypeScript implementation. The `v3.6
 - persistent sanitized audit logs with tool-level success/error records
 - `*_COMMAND` secret loading in addition to `*_FILE`
 - a Claude Desktop config installer script
+- an interactive Claude Desktop setup wizard for Bridge users
+- a documented local-first Claude Desktop / MCP Bundle packaging plan
 - CI on Node 20 and 22
 - broader unit coverage around the new sync/thread/runtime paths
 
@@ -48,6 +50,7 @@ That gap has now been closed with a working TypeScript implementation. The `v3.6
   - reversible thread-level star -> unstar coverage against a real mailbox thread
   - batch attachment save against a real mailbox message
 - the Claude Desktop installer helper builds and is covered by unit tests
+- the Claude Desktop setup wizard helper builds and is covered by unit tests
 - the repository now contains concrete source for:
   - SQLite mailbox indexing
   - audit logging and retrieval

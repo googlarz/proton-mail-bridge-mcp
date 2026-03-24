@@ -115,6 +115,8 @@ For most local Bridge setups, the defaults are:
 
 ## 🚀 Quick Start
 
+If you want the fastest working setup for Claude Desktop, use the local setup wizard. You do not need to paste environment variables by hand for the normal Desktop path.
+
 ### 1. 🔐 Open Proton Bridge
 
 Open Proton Bridge and make sure your account is connected.
@@ -140,11 +142,70 @@ npm install
 
 If `npm` does not exist on your machine, install Node.js 18+ first, then run the commands again.
 
-### 3. 🧩 Paste Your Bridge Settings
+### 3. 🪄 Run The Claude Desktop Setup Wizard
 
-Open Terminal in the project folder and paste this block.
+```bash
+npm run setup:claude-desktop
+```
 
-Replace the example values with your own Bridge values:
+The wizard does the normal Claude Desktop install for you:
+
+- checks the standard Proton Bridge local ports
+- asks for your Proton Bridge username and Bridge password
+- uses the standard local Bridge addresses unless you override them
+- writes the Claude Desktop MCP entry automatically
+- stores the `PROTONMAIL_*` values inside that local Claude Desktop config
+- backs up the old Claude Desktop config before changing it
+
+### 4. 🔁 Restart Claude Desktop
+
+After the wizard finishes:
+
+- restart Claude Desktop
+- keep Proton Bridge open
+- open Claude and confirm the Proton Mail Bridge MCP tools appear
+
+## 🤖 Claude Desktop Setup
+
+If you use Claude Desktop, read this first:
+
+- The `Remote MCP server URL` field is for a hosted connector that Claude Desktop can reach over the internet.
+- This project is different: it talks to Proton Bridge on your own machine, usually on `127.0.0.1`.
+- Because Proton Bridge is local, **this MCP server** is also designed to run locally and talk to Claude Desktop over `stdio`.
+- That is why there is no ready-made remote URL to paste into that screen from this repo today.
+
+So the supported Claude Desktop path in `v3.7` is local-first:
+
+- `npm run setup:claude-desktop` for the guided zero-manual-config flow
+- `npm run install:claude-desktop` for env-driven or automated installs
+- the `.mcpb` local extension track documented in [CLAUDE-DESKTOP-PACKAGING.md](./CLAUDE-DESKTOP-PACKAGING.md)
+
+If you want a true remote URL later, that requires a different deployment model, not just a different config field, because the mail access currently depends on your local Proton Bridge session.
+
+### Zero-Manual-Config Path For Bridge Users
+
+1. Open Terminal in the project folder.
+2. Run:
+
+```bash
+npm run setup:claude-desktop
+```
+
+3. Answer the prompts for:
+   - Proton Bridge username
+   - Proton Bridge password
+   - whether you want to use the standard local Bridge ports
+   - local data directory
+4. Restart Claude Desktop.
+5. Open Claude and check that the Proton Mail Bridge MCP tools are available.
+
+This is the easiest path because it avoids manual JSON edits and avoids manual environment-variable setup.
+
+### Power-User Local Install
+
+If you prefer to control the env yourself, or if you want a more scriptable setup, use the installer command below.
+
+First, export your Bridge values:
 
 ```bash
 export PROTONMAIL_USERNAME='your-address@proton.me'
@@ -166,35 +227,36 @@ export PROTONMAIL_ALLOW_REMOTE_DRAFT_SYNC='true'
 export PROTONMAIL_ALLOWED_ACTIONS='mark_read,mark_unread,star,unstar,archive,trash,restore'
 ```
 
-What these do:
+Then run:
 
-- connect this MCP to Proton Bridge
-- store the local mail index under your home folder
-- keep the local index refreshed
-- allow normal email actions like send, archive, and restore
+```bash
+npm run install:claude-desktop
+```
 
-If you do not want raw secrets in your shell, the server also supports:
+That installer:
+
+- builds the project
+- writes a Claude Desktop MCP entry
+- uses the default server key `proton-mail-bridge`
+- backs up the previous Claude Desktop config if one exists
+- copies current `PROTONMAIL_*` and `DEBUG` values unless you pass `--no-env`
+
+If you do not want raw secrets in your shell or config, the server also supports:
 
 - `PROTONMAIL_USERNAME_FILE`
 - `PROTONMAIL_PASSWORD_FILE`
 - `PROTONMAIL_USERNAME_COMMAND`
 - `PROTONMAIL_PASSWORD_COMMAND`
 
-### 4. 🏗️ Build It
+### Optional Local Smoke Test
 
-```bash
-npm run build
-```
-
-### 5. ✅ Test The Connection
-
-If you want a quick local verification:
+If you want a real end-to-end check after install:
 
 ```bash
 npm run smoke:bridge
 ```
 
-That checks the most important real-world path:
+That checks:
 
 - Proton Bridge connection
 - IMAP read
@@ -212,48 +274,9 @@ export PROTONMAIL_SMOKE_MUTATION_EMAIL_ID='INBOX::123'
 
 Only do that with a safe disposable message id.
 
-## 🤖 Claude Desktop Setup
-
-If you use Claude Desktop, read this first:
-
-- The "Add custom connector" screen with `Name` and `Remote MCP server URL` is for remote MCP connectors hosted on the internet.
-- This repository currently ships a local MCP server that runs on your machine over `stdio`.
-- That means there is no URL from this repo that you can paste into that screen today.
-
-So for this project right now:
-
-- use the local install flow below
-- do not use the `Remote MCP server URL` field unless you separately deploy a hosted remote version of this server
-
-If you want one-click support for that new connector screen later, the next product step would be either:
-
-- a hosted remote MCP version of Proton Mail Bridge MCP
-- or a packaged Claude Desktop extension / MCP Bundle (`.mcpb`)
-
-### Easiest Path For Most Users
-
-1. Open Terminal in the project folder.
-2. Paste the Bridge settings from Step 3 above.
-3. Run:
-
-```bash
-npm run install:claude-desktop
-```
-
-4. Restart Claude Desktop.
-5. Open Claude and check that the MCP tools are available.
-
-The installer does all of this for you:
-
-- builds the project
-- writes a Claude Desktop MCP entry
-- uses the default server key `proton-mail-bridge`
-- backs up the previous Claude Desktop config if one exists
-- copies current `PROTONMAIL_*` and `DEBUG` values unless you pass `--no-env`
-
 Important:
 
-- run the installer in the same Terminal window where you pasted your Bridge settings
+- run the installer in the same Terminal window where you exported your Bridge settings
 - keep Proton Bridge open when using Claude Desktop
 - if your Bridge password or ports change later, run the installer again
 - this flow is for the local MCP setup, not the remote URL connector screen
