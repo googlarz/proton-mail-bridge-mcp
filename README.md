@@ -214,7 +214,21 @@ Only do that with a safe disposable message id.
 
 ## 🤖 Claude Desktop Setup
 
-If you use Claude Desktop, this is the easiest path.
+If you use Claude Desktop, read this first:
+
+- The "Add custom connector" screen with `Name` and `Remote MCP server URL` is for remote MCP connectors hosted on the internet.
+- This repository currently ships a local MCP server that runs on your machine over `stdio`.
+- That means there is no URL from this repo that you can paste into that screen today.
+
+So for this project right now:
+
+- use the local install flow below
+- do not use the `Remote MCP server URL` field unless you separately deploy a hosted remote version of this server
+
+If you want one-click support for that new connector screen later, the next product step would be either:
+
+- a hosted remote MCP version of Proton Mail Bridge MCP
+- or a packaged Claude Desktop extension / MCP Bundle (`.mcpb`)
 
 ### Easiest Path For Most Users
 
@@ -242,6 +256,7 @@ Important:
 - run the installer in the same Terminal window where you pasted your Bridge settings
 - keep Proton Bridge open when using Claude Desktop
 - if your Bridge password or ports change later, run the installer again
+- this flow is for the local MCP setup, not the remote URL connector screen
 
 ### Manual Claude Desktop Config
 
@@ -270,6 +285,7 @@ If you prefer to edit the config yourself, add an entry like this to Claude Desk
 
 ### 🛠️ Claude Desktop Tips
 
+- If Claude shows only the "Add custom connector" remote URL dialog, remember: this repo is not a remote URL connector yet.
 - Keep Proton Bridge running before starting Claude Desktop.
 - If Claude does not see the tools, restart Claude Desktop after installing or editing config.
 - If credentials or Bridge ports change, reinstall or update the config.
