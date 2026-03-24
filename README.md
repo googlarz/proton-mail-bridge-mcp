@@ -58,20 +58,20 @@ Why: the code is live-tested, but true production confidence still comes from so
 
 As of March 24, 2026, the practical comparison looks like this:
 
-Here, "local MCP server" means this project itself running on your machine, Claude Desktop host, or another machine you control.
+Here, "local MCP server" means **this MCP server** itself running on your machine, Claude Desktop host, or another machine you control.
 
 | Capability | Native Gmail connector | Proton Mail Bridge MCP |
 | --- | --- | --- |
-| Setup | 🙂 First-party OAuth inside Claude | 😐 Requires Proton Bridge plus this MCP server running locally |
-| Search and read | 😀 Native Claude UX with source citations | 🙂 Yes, through IMAP plus local indexing |
-| Original-provider links | 😀 Better | 😐 MCP resource links and locate hints, not true Proton webmail links |
-| Native labels and threads | 😀 Gmail-native | 🙂 Reconstructed from IMAP and the local index |
-| Send email | 😕 No | 😀 Yes, through Proton Bridge SMTP |
-| Draft workflows | 😀 Better first-party UX | 😀 Strong operational control, including remote draft sync |
-| Attachment content | 😕 Limited | 😀 Can fetch content and save files |
-| Mailbox actions | 😕 Limited | 😀 Read, star, move, archive, trash, restore, delete, and batch actions |
-| Cross-device Claude availability | 😀 Better | 😐 Only where this MCP server is installed and running |
-| Auth model | 😀 First-party Google auth | 😐 Local Proton Bridge credentials |
+| Setup | ✅ First-party OAuth inside Claude | 🔧 Requires Proton Bridge plus **this MCP server** running locally |
+| Search and read | ✅ Native Claude UX with source citations | ✅ Yes, through IMAP plus local indexing |
+| Original-provider links | ✅ Better | 🟡 MCP resource links and locate hints, not true Proton webmail links |
+| Native labels and threads | ✅ Gmail-native | 🟡 Reconstructed from IMAP and the local index |
+| Send email | ❌ No | ✅ Yes, through Proton Bridge SMTP |
+| Draft workflows | ✅ Better first-party UX | ✅ Strong operational control, including remote draft sync |
+| Attachment content | 🟡 Limited | ✅ Can fetch content and save files |
+| Mailbox actions | 🟡 Limited | ✅ Read, star, move, archive, trash, restore, delete, and batch actions |
+| Cross-device Claude availability | ✅ Better | 🟡 Only where this MCP server is installed and running |
+| Auth model | ✅ First-party Google auth | 🔧 Local Proton Bridge credentials |
 
 What Gmail still does better:
 
