@@ -1,7 +1,7 @@
 # Validation Status
 
 **Audit date:** 2026-03-24  
-**Repository:** `anyrxo/protonmail-pro-mcp`  
+**Repository:** `googlarz/proton-mail-bridge-mcp`  
 **Product:** `Proton Mail Bridge MCP`  
 **Version:** 3.6.0
 

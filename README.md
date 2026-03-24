@@ -4,6 +4,10 @@
 
 Proton Mail Bridge MCP: professional Proton Mail management with 20+ tools, advanced analytics, and seamless Proton Bridge integration.
 
+Current published GitHub repository: `googlarz/proton-mail-bridge-mcp`
+
+Note: Glama is still indexed under the original repository path right now, so the badge above still points to the legacy listing until the new repo is indexed there.
+
 `Proton Mail Bridge MCP` is a production-oriented MCP server for people who want Claude to work with Proton Mail in a way that is actually useful day to day, not just technically connected. It uses Proton Bridge for IMAP and SMTP, adds a local SQLite index for faster follow-up work, and exposes tools for reading, drafting, sending, attachments, and mailbox actions.
 
 ## Why This Exists
@@ -124,13 +128,11 @@ For most local Bridge setups, the defaults are:
 
 ### 2. Clone And Install
 
-The current GitHub repository path is still `protonmail-pro-mcp`, even though the product name is now `Proton Mail Bridge MCP`.
-
 There is now a concrete repo rename plan in [RENAME-MIGRATION.md](./RENAME-MIGRATION.md) for moving cleanly from `protonmail-pro-mcp` to `proton-mail-bridge-mcp`.
 
 ```bash
-git clone https://github.com/anyrxo/protonmail-pro-mcp.git
-cd protonmail-pro-mcp
+git clone https://github.com/googlarz/proton-mail-bridge-mcp.git
+cd proton-mail-bridge-mcp
 npm install
 ```
 
@@ -227,8 +229,8 @@ If you prefer to edit the config yourself, add an entry like this:
   "mcpServers": {
     "proton-mail-bridge": {
       "command": "node",
-      "args": ["/absolute/path/to/protonmail-pro-mcp/dist/index.js"],
-      "cwd": "/absolute/path/to/protonmail-pro-mcp",
+      "args": ["/absolute/path/to/proton-mail-bridge-mcp/dist/index.js"],
+      "cwd": "/absolute/path/to/proton-mail-bridge-mcp",
       "env": {
         "PROTONMAIL_USERNAME": "your-address@proton.me",
         "PROTONMAIL_PASSWORD": "your-bridge-password",
