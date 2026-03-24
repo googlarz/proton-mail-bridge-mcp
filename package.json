@@ -1,20 +1,25 @@
 {
   "name": "@sirency/protonmail-pro-mcp",
-  "version": "1.0.0",
-  "description": "🌟 The Ultimate ProtonMail MCP by The Sirency Collective - Professional email management with 20+ tools, advanced analytics, and seamless Proton Bridge integration.",
+  "version": "3.6.0",
+  "description": "Proton Mail Bridge MCP - Professional Proton Mail management with 20+ tools, advanced analytics, and seamless Proton Bridge integration.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "protonmail-pro-mcp": "dist/index.js"
+    "protonmail-pro-mcp": "dist/index.js",
+    "proton-mail-bridge-mcp": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "test": "node test.js",
+    "install:claude-desktop": "npm run build && node dist/scripts/install-claude-desktop.js",
+    "test:unit": "npm run build && node --test test/*.test.mjs",
+    "test": "npm run build && node --input-type=module -e \"import('./dist/index.js')\" && node --test test/*.test.mjs",
+    "smoke:bridge": "npm run build && node dist/scripts/bridge-smoke.js",
     "prepare": "npm run build",
     "lint": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "ci": "npm run lint && npm test"
   },
   "keywords": [
     "protonmail",
@@ -51,9 +56,11 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^12.8.0",
     "imapflow": "^1.0.164",
     "mailparser": "^3.7.1",
-    "nodemailer": "^6.9.15"
+    "nodemailer": "^8.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
