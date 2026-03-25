@@ -1,0 +1,9 @@
+.git
+.github
+node_modules
+src
+test
+.tmp
+.local-v3-smoke
+README.md.bak*
+npm-debug.log*

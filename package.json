@@ -73,6 +73,8 @@
     "README.md",
     "CLAUDE-DESKTOP-PACKAGING.md",
     "FINAL-VALIDATION.md",
+    "LICENSE",
+    "glama.json",
     "package.json"
   ],
   "publishConfig": {

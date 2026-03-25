@@ -1,5 +1,7 @@
 # Proton Mail Bridge MCP
 
+[![proton-mail-bridge-mcp MCP server](https://glama.ai/mcp/servers/googlarz/proton-mail-bridge-mcp/badges/card.svg)](https://glama.ai/mcp/servers/googlarz/proton-mail-bridge-mcp)
+
 🌉 Proton Mail Bridge MCP - Professional Proton Mail management with 20+ tools, advanced analytics, and seamless Proton Bridge integration.
 
 If you use Claude Desktop and Proton Mail, this project gives Claude a practical way to work with your Proton mailbox through Proton Bridge.
