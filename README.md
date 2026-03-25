@@ -44,7 +44,9 @@ What to expect:
 - Builds a local SQLite index with incremental sync checkpoints.
 - Watches for mailbox changes with IMAP IDLE-aware refresh.
 - Reconstructs normalized labels and threads from IMAP data.
-- Generates actionable thread views, inbox digests, and follow-up candidates.
+- Classifies more attachment types, including inline images, calendar invites, archives, and signature files.
+- Generates actionable thread views, inbox digests, follow-up candidates, meeting prep, document-finder views, and thread briefs.
+- Supports safer dry-run previews for batch and thread mailbox actions.
 - Emits MCP resource links and structured source metadata for downstream citation-style rendering.
 
 ## Good To Know
@@ -59,7 +61,7 @@ Why: Proton Bridge normally runs on your own machine, so this MCP server is desi
 Why: Proton-native thread and label objects are not available here through a first-party Claude connector path.
 
 - Attachment handling is broad, but not magic.
-Why: the common cases work well, but email MIME formats can be messy across different senders and clients.
+Why: the common cases work well, including calendar invites and common document/image attachments, but email MIME formats can still be messy across different senders and clients.
 
 ## What Is Still Missing, And Why
 
@@ -217,6 +219,8 @@ That means the supported Claude Desktop path in the current release is:
 
 - `npm run setup:claude-desktop` for the guided zero-manual-config flow
 - `npm run install:claude-desktop` for advanced or automated Claude Desktop installs
+- `npm run update:claude-desktop` to refresh the installed Claude Desktop runtime after updating this repo
+- `npm run doctor:claude-desktop` to confirm Claude Desktop still points at a valid Proton Mail Bridge MCP runtime
 - the `.mcpb` local extension track documented in [CLAUDE-DESKTOP-PACKAGING.md](./CLAUDE-DESKTOP-PACKAGING.md)
 
 ### Zero-Manual-Config Path For Bridge Users
@@ -466,9 +470,12 @@ What this project does better:
 - `get_labels`
 - `get_threads`
 - `get_thread_by_id`
+- `get_thread_brief`
 - `get_actionable_threads`
 - `get_inbox_digest`
 - `get_follow_up_candidates`
+- `find_document_threads`
+- `prepare_meeting_context`
 
 ### Actions
 
@@ -505,6 +512,8 @@ What this project does better:
 - Audit logs live at `PROTONMAIL_DATA_DIR/audit.log`.
 - Background sync and IMAP IDLE can keep the local index warm, but they still depend on Bridge staying up.
 - `run_doctor` is the quickest tool-level health check once the server is running.
+- `batch_email_action` and `apply_thread_action` both support `dryRun: true` when you want a safe preview before changing mail.
+- `search_indexed_emails` supports query shortcuts like `from:`, `to:`, `subject:`, `label:`, and `domain:`.
 
 ## Validation Snapshot
 

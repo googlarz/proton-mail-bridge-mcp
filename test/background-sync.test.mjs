@@ -101,3 +101,39 @@ test("background sync records success and schedules the next run", async () => {
     service.stop();
   }
 });
+
+test("background sync backs off cleanly on auth failures", async () => {
+  const imapService = {
+    attempts: 0,
+    async collectEmailsForIndex() {
+      this.attempts += 1;
+      throw new Error("Incorrect login credentials.");
+    },
+    async waitForMailboxChanges() {
+      throw new Error("Incorrect login credentials.");
+    },
+  };
+  const localIndexService = {
+    async getSyncCheckpointMap() {
+      return {};
+    },
+    async recordSnapshot() {
+      throw new Error("should not be called");
+    },
+  };
+
+  const service = new BackgroundSyncService(createConfig(), imapService, localIndexService);
+  service.start();
+
+  try {
+    const status = await service.runNow("unit-test-auth");
+    assert.equal(imapService.attempts, 1);
+    assert.equal(status.lastFailureKind, "auth");
+    assert.match(status.lastError, /incorrect login credentials/i);
+    assert.ok(status.backoffUntil);
+    assert.ok(status.nextRunAt);
+    assert.equal(status.idleWatching, false);
+  } finally {
+    service.stop();
+  }
+});

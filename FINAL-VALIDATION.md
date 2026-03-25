@@ -3,7 +3,7 @@
 **Audit date:** 2026-03-24  
 **Repository:** `googlarz/proton-mail-bridge-mcp`  
 **Product:** `Proton Mail Bridge MCP`  
-**Version:** 1.3.0
+**Version:** 1.4.0
 
 ## Summary
 
@@ -13,17 +13,23 @@ The repository previously claimed a fully implemented MCP server, but the commit
 - six imported modules were missing from git
 - there was no `CallTool` handler, only tool metadata
 
-That gap has now been closed with a working TypeScript implementation. The `v1.3.0` layer cleans up legacy package metadata, removes baked inspection credentials from the Docker image, and keeps the Claude Desktop install checker and stable machine-wide runtime flow from the prior passes:
+That gap has now been closed with a working TypeScript implementation. The `v1.4.0` layer builds on the earlier cleanup and install work with deeper mail-quality upgrades:
 
 - SQLite-backed mailbox indexing instead of JSON-only metadata persistence
 - incremental sync checkpoints per folder with persisted sync state
 - IMAP IDLE-aware change detection for background refresh and diagnostics
-- attachment-text extraction into the local search index for text-like files
+- more robust attachment classification for documents, calendar invites, inline images, archives, and signature files
+- richer attachment-text extraction, including calendar invite summaries
+- better normalized label and mailbox-role handling across Proton Bridge folder shapes
+- search shortcuts and richer ranking for local indexed search
 - inbox digest and follow-up candidate views for assistant-style mailbox triage
+- document-finder, meeting-prep, and thread-brief workflows for Claude-style mail use
+- dry-run previews for batch and thread mailbox actions
 - persistent sanitized audit logs with tool-level success/error records
 - `*_COMMAND` secret loading in addition to `*_FILE`
 - a Claude Desktop config installer script
 - an interactive Claude Desktop setup wizard for Bridge users
+- Claude Desktop update/doctor command paths for easier maintenance
 - a documented local-first Claude Desktop / MCP Bundle packaging plan
 - CI on Node 20 and 22
 - broader unit coverage around the new sync/thread/runtime paths
@@ -40,6 +46,9 @@ That gap has now been closed with a working TypeScript implementation. The `v1.3
 - incremental second-pass sync and persisted checkpoint coverage succeed
 - indexed actionable-thread ranking and normalized thread lookup succeed
 - indexed inbox digest and follow-up candidate generation succeed
+- indexed document-thread discovery succeeds
+- indexed meeting-prep context generation succeeds
+- indexed search shortcut coverage succeeds for normalized labels and sender domains
 - live attachment listing, content fetch, and temp-file save succeed against a real mailbox message
 - short live IMAP IDLE probe succeeds against Proton Bridge
 - live Proton Drafts-folder sync succeeds for reply and compose drafts

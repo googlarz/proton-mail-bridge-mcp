@@ -56,6 +56,9 @@ export interface EmailAttachmentSummary {
   cid?: string;
   checksum?: string;
   isInline?: boolean;
+  kind?: "document" | "image" | "calendar" | "signature" | "archive" | "message" | "text" | "other";
+  isCalendarInvite?: boolean;
+  isSignature?: boolean;
 }
 
 export interface EmailSummary {
@@ -263,11 +266,13 @@ export interface SearchEmailsInput {
   threadId?: string;
   from?: string;
   to?: string;
+  senderDomain?: string;
   subject?: string;
   hasAttachment?: boolean;
   attachmentName?: string;
   isRead?: boolean;
   isStarred?: boolean;
+  mailboxRole?: string;
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
@@ -348,6 +353,8 @@ export interface BackgroundSyncStatus {
   lastIdleChangeAt?: string;
   lastIdleEventCount?: number;
   lastIdleError?: string;
+  lastFailureKind?: "auth" | "transient";
+  backoffUntil?: string;
   nextRunAt?: string;
 }
 

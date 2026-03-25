@@ -138,6 +138,12 @@ export function extractAttachments(
       disposition === "attachment" || (disposition === "inline" && Boolean(filename));
 
     if (looksLikeAttachment || filename) {
+      const classification = classifyAttachment({
+        filename,
+        contentType: node.type,
+        disposition: node.disposition,
+        cid: node.id,
+      });
       attachments.push({
         id: node.part,
         filename,
@@ -147,6 +153,9 @@ export function extractAttachments(
         part: node.part,
         cid: node.id,
         isInline: disposition === "inline",
+        kind: classification.kind,
+        isCalendarInvite: classification.isCalendarInvite,
+        isSignature: classification.isSignature,
       });
     }
 
@@ -262,6 +271,27 @@ export function matchesLocalSearchFilters(
     }
   }
 
+  if (filters.senderDomain) {
+    const senderDomain = filters.senderDomain.toLowerCase();
+    const match = email.from.some((entry) => extractDomain(entry.address || "") === senderDomain);
+    if (!match) {
+      return false;
+    }
+  }
+
+  if (filters.mailboxRole) {
+    const roleNeedle = filters.mailboxRole.toLowerCase();
+    const roles = new Set(
+      [email.folder, ...email.labels]
+        .map((value) => normalizeMailboxLabel(value))
+        .filter((value): value is string => Boolean(value))
+        .map((value) => value.toLowerCase()),
+    );
+    if (!roles.has(roleNeedle)) {
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -369,4 +399,113 @@ export function isTextLikeMimeType(mimeType?: string): boolean {
     normalized.includes("javascript") ||
     normalized.includes("csv")
   );
+}
+
+export function classifyAttachment(input: {
+  filename?: string;
+  contentType?: string;
+  disposition?: string;
+  cid?: string;
+}): Pick<EmailAttachmentSummary, "kind" | "isCalendarInvite" | "isSignature"> {
+  const filename = input.filename?.toLowerCase() || "";
+  const contentType = input.contentType?.toLowerCase() || "";
+  const disposition = input.disposition?.toLowerCase() || "";
+  const cid = input.cid?.toLowerCase() || "";
+
+  const isCalendarInvite =
+    contentType === "text/calendar" || filename.endsWith(".ics") || filename.endsWith(".ifb");
+  const isSignature =
+    filename === "smime.p7s" ||
+    filename === "signature.asc" ||
+    contentType.includes("pkcs7-signature") ||
+    contentType.includes("pgp-signature");
+
+  if (isCalendarInvite) {
+    return { kind: "calendar", isCalendarInvite: true, isSignature: false };
+  }
+  if (isSignature) {
+    return { kind: "signature", isCalendarInvite: false, isSignature: true };
+  }
+  if (contentType.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(filename) || Boolean(cid)) {
+    return { kind: "image", isCalendarInvite: false, isSignature: false };
+  }
+  if (contentType === "message/rfc822" || filename.endsWith(".eml") || filename.endsWith(".msg")) {
+    return { kind: "message", isCalendarInvite: false, isSignature: false };
+  }
+  if (
+    /\.(zip|gz|tgz|bz2|rar|7z)$/i.test(filename) ||
+    contentType.includes("zip") ||
+    contentType.includes("compressed") ||
+    contentType.includes("archive")
+  ) {
+    return { kind: "archive", isCalendarInvite: false, isSignature: false };
+  }
+  if (isTextLikeMimeType(contentType) || /\.(txt|md|csv|json|xml|html?)$/i.test(filename)) {
+    return { kind: "text", isCalendarInvite: false, isSignature: false };
+  }
+  if (
+    /\.(pdf|docx?|xlsx?|pptx?)$/i.test(filename) ||
+    contentType.includes("pdf") ||
+    contentType.includes("officedocument") ||
+    contentType.includes("msword") ||
+    contentType.includes("spreadsheet") ||
+    contentType.includes("presentation")
+  ) {
+    return { kind: "document", isCalendarInvite: false, isSignature: false };
+  }
+  if (disposition === "inline" && !filename) {
+    return { kind: "image", isCalendarInvite: false, isSignature: false };
+  }
+  return { kind: "other", isCalendarInvite: false, isSignature: false };
+}
+
+export function summarizeCalendarText(value: string): string | undefined {
+  const normalized = value.replace(/\r/g, "");
+  const fields = new Map<string, string>();
+
+  for (const line of normalized.split("\n")) {
+    const separator = line.indexOf(":");
+    if (separator <= 0) {
+      continue;
+    }
+    const key = line.slice(0, separator).split(";")[0].trim().toUpperCase();
+    const fieldValue = line.slice(separator + 1).trim();
+    if (fieldValue && !fields.has(key)) {
+      fields.set(key, fieldValue);
+    }
+  }
+
+  const summary = [
+    fields.get("SUMMARY"),
+    fields.get("ORGANIZER"),
+    fields.get("DTSTART") ? `Starts ${fields.get("DTSTART")}` : undefined,
+    fields.get("DTEND") ? `Ends ${fields.get("DTEND")}` : undefined,
+    fields.get("LOCATION") ? `Location ${fields.get("LOCATION")}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
+  return previewText(summary || normalized, 8_000);
+}
+
+export function normalizeMailboxLabel(value?: string): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const decoded = decodeURIComponent(trimmed);
+  const lower = decoded.toLowerCase();
+
+  if (lower === "inbox") return "Inbox";
+  if (lower === "archive") return "Archive";
+  if (lower === "all mail") return "All Mail";
+  if (lower === "sent" || lower === "sent mail") return "Sent";
+  if (lower === "drafts") return "Drafts";
+  if (lower === "spam" || lower === "junk") return "Spam";
+  if (lower === "trash" || lower === "deleted messages") return "Trash";
+  if (lower === "starred") return "Starred";
+  if (decoded.startsWith("Labels/")) return decoded.slice("Labels/".length) || "Labels";
+
+  return decoded;
 }

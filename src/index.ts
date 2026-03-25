@@ -556,8 +556,16 @@ const TOOLS = [
       type: "object",
       properties: {
         emailIds: {
-          type: "string",
-          description: "Composite email ids, comma-separated.",
+          oneOf: [
+            {
+              type: "array",
+              items: { type: "string" },
+            },
+            {
+              type: "string",
+            },
+          ],
+          description: "Composite email ids as an array or a comma-separated string.",
         },
         action: {
           type: "string",
@@ -571,6 +579,11 @@ const TOOLS = [
           type: "boolean",
           description: "Continue applying the action after an individual failure.",
           default: true,
+        },
+        dryRun: {
+          type: "boolean",
+          description: "Preview the impact without mutating the mailbox.",
+          default: false,
         },
       },
       required: ["emailIds", "action"],
@@ -601,6 +614,11 @@ const TOOLS = [
           type: "boolean",
           description: "Continue applying the action after an individual failure.",
           default: true,
+        },
+        dryRun: {
+          type: "boolean",
+          description: "Preview the impact without mutating the mailbox.",
+          default: false,
         },
         syncBefore: {
           type: "boolean",
@@ -712,7 +730,8 @@ const TOOLS = [
   },
   {
     name: "search_indexed_emails",
-    description: "Search the persistent on-disk mailbox index without hitting IMAP.",
+    description:
+      "Search the persistent on-disk mailbox index without hitting IMAP. Supports shortcuts like from:, to:, subject:, label:, and domain: inside the query.",
     inputSchema: {
       type: "object",
       properties: {
@@ -722,11 +741,13 @@ const TOOLS = [
         threadId: { type: "string", description: "Thread id filter." },
         from: { type: "string", description: "Sender filter." },
         to: { type: "string", description: "Recipient filter." },
+        senderDomain: { type: "string", description: "Sender domain filter such as example.com." },
         subject: { type: "string", description: "Subject filter." },
         hasAttachment: { type: "boolean", description: "Attachment filter." },
         attachmentName: { type: "string", description: "Attachment filename filter." },
         isRead: { type: "boolean", description: "Read status filter." },
         isStarred: { type: "boolean", description: "Starred status filter." },
+        mailboxRole: { type: "string", description: "Normalized mailbox role like Inbox, Sent, Archive, or Trash." },
         dateFrom: { type: "string", description: "Inclusive start date/time in ISO format." },
         dateTo: { type: "string", description: "Inclusive end date/time in ISO format." },
         limit: { type: "number", description: "Maximum results.", default: 100 },
@@ -824,6 +845,56 @@ const TOOLS = [
           default: false,
         },
       },
+    },
+  },
+  {
+    name: "find_document_threads",
+    description: "Find threads that likely contain important attachments such as invoices, contracts, travel docs, or calendar invites.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        category: {
+          type: "string",
+          enum: ["document", "invoice", "contract", "travel", "calendar"],
+          description: "Document category to prioritize.",
+          default: "document",
+        },
+        query: { type: "string", description: "Optional filter across thread subjects and attachment names." },
+        limit: { type: "number", description: "Maximum threads to return.", default: 25 },
+        syncBefore: {
+          type: "boolean",
+          description: "Refresh the local mailbox index from IMAP before searching document threads.",
+          default: false,
+        },
+      },
+    },
+  },
+  {
+    name: "prepare_meeting_context",
+    description: "Pull recent threads and latest inbound context for a person or company domain before a meeting.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        person: { type: "string", description: "Person name or email fragment to match." },
+        domain: { type: "string", description: "Domain to match, such as example.com." },
+        limit: { type: "number", description: "Maximum threads to include.", default: 10 },
+        syncBefore: {
+          type: "boolean",
+          description: "Refresh the local mailbox index from IMAP before building the meeting prep.",
+          default: false,
+        },
+      },
+    },
+  },
+  {
+    name: "get_thread_brief",
+    description: "Summarize a normalized thread with the latest inbound, latest outbound, attachments, and likely next action.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        threadId: { type: "string", description: "Thread id from get_threads or get_actionable_threads." },
+      },
+      required: ["threadId"],
     },
   },
   {
@@ -1127,6 +1198,21 @@ function parseListValues(value?: string): string[] {
     .split(/[;,]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function parseStringListArg(args: Record<string, unknown>, key: string): string[] {
+  const value = args[key];
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return parseListValues(value);
+  }
+
+  throw new McpError(ErrorCode.InvalidParams, `${key} must be a non-empty string or string array.`);
 }
 
 function requireEmailAction(args: Record<string, unknown>, key = "action"): EmailAction {
@@ -1697,11 +1783,14 @@ async function applyBatchEmailAction(
     action: EmailAction;
     targetFolder?: string;
     continueOnError: boolean;
+    dryRun?: boolean;
   },
 ): Promise<BatchActionResult> {
   for (const emailId of input.emailIds) {
     try {
-      const result = await runEmailAction(imapService, emailId, input.action, input.targetFolder);
+      const result = input.dryRun
+        ? await previewEmailAction(imapService, emailId, input.action, input.targetFolder)
+        : await runEmailAction(imapService, emailId, input.action, input.targetFolder);
       entries.push({
         emailId,
         ok: true,
@@ -1732,6 +1821,37 @@ async function applyBatchEmailAction(
   };
 }
 
+async function previewEmailAction(
+  imapService: SimpleIMAPService,
+  emailId: string,
+  action: EmailAction,
+  targetFolder?: string,
+): Promise<Record<string, unknown>> {
+  const detail = await imapService.getEmailById(emailId);
+  const target =
+    action === "archive"
+      ? "Archive"
+      : action === "trash"
+        ? "Trash"
+        : action === "restore"
+          ? targetFolder || "INBOX"
+          : detail.folder;
+
+  return {
+    emailId,
+    previewOnly: true,
+    action,
+    currentFolder: detail.folder,
+    targetFolder: target,
+    subject: detail.subject,
+    from: detail.from,
+    date: detail.internalDate || detail.date,
+    hasAttachments: detail.hasAttachments,
+    isRead: detail.isRead,
+    isStarred: detail.isStarred,
+  };
+}
+
 function pickReplyTargetFromThread(
   thread: Awaited<ReturnType<LocalIndexService["getThreadById"]>>,
   ownerEmail: string,
@@ -1751,6 +1871,61 @@ function pickReplyTargetFromThread(
   }
 
   return messages[messages.length - 1];
+}
+
+function buildThreadBrief(
+  thread: Awaited<ReturnType<LocalIndexService["getThreadById"]>>,
+  ownerEmail: string,
+): Record<string, unknown> {
+  const messages = [...thread.messages];
+  const latestMessage = messages[messages.length - 1];
+  const latestInbound = [...messages]
+    .reverse()
+    .find((message) => !message.from.some((entry) => lowerCaseAddress(entry.address) === lowerCaseAddress(ownerEmail)));
+  const latestOutbound = [...messages]
+    .reverse()
+    .find((message) => message.from.some((entry) => lowerCaseAddress(entry.address) === lowerCaseAddress(ownerEmail)));
+  const pendingOn = latestMessage
+    ? latestMessage.from.some((entry) => lowerCaseAddress(entry.address) === lowerCaseAddress(ownerEmail))
+      ? "them"
+      : "you"
+    : "unknown";
+
+  return {
+    threadId: thread.id,
+    subject: thread.subject,
+    messageCount: thread.messageCount,
+    unreadCount: thread.unreadCount,
+    latestDate: thread.latestDate,
+    normalizedLabels: thread.normalizedLabels,
+    participants: thread.participants,
+    pendingOn,
+    likelyNextAction: pendingOn === "you" ? "reply" : pendingOn === "them" ? "wait_or_follow_up" : "review",
+    latestInbound: latestInbound
+      ? {
+          emailId: latestInbound.primaryEmailId,
+          from: latestInbound.from,
+          date: latestInbound.internalDate || latestInbound.date,
+          preview: latestInbound.preview,
+        }
+      : undefined,
+    latestOutbound: latestOutbound
+      ? {
+          emailId: latestOutbound.primaryEmailId,
+          to: latestOutbound.to,
+          date: latestOutbound.internalDate || latestOutbound.date,
+          preview: latestOutbound.preview,
+        }
+      : undefined,
+    attachments: messages.flatMap((message) =>
+      message.attachments.map((attachment) => ({
+        emailId: message.primaryEmailId,
+        filename: attachment.filename,
+        kind: attachment.kind,
+        contentType: attachment.contentType,
+      })),
+    ),
+  };
 }
 
 function readEnvValue(name: string): string | undefined {
@@ -1911,7 +2086,7 @@ export function createServer(
   const server = new Server(
     {
       name: "proton-mail-bridge-mcp",
-      version: "1.3.0",
+      version: "1.4.0",
     },
     {
       capabilities: {
@@ -2815,7 +2990,7 @@ export function createServer(
 
         case "batch_email_action":
         {
-          const emailIds = [...new Set(parseListValues(requireString(args, "emailIds")))];
+          const emailIds = [...new Set(parseStringListArg(args, "emailIds"))];
           if (emailIds.length === 0) {
             throw new McpError(ErrorCode.InvalidParams, "emailIds must contain at least one email id.");
           }
@@ -2827,6 +3002,7 @@ export function createServer(
               action,
               targetFolder: optionalString(args, "targetFolder"),
               continueOnError: normalizeBoolean(args.continueOnError, true),
+              dryRun: normalizeBoolean(args.dryRun, false),
             }),
           );
 
@@ -3045,12 +3221,14 @@ export function createServer(
             threadId: optionalString(args, "threadId"),
             from: optionalString(args, "from"),
             to: optionalString(args, "to"),
+            senderDomain: optionalString(args, "senderDomain"),
             subject: optionalString(args, "subject"),
             hasAttachment:
               typeof args.hasAttachment === "boolean" ? args.hasAttachment : undefined,
             attachmentName: optionalString(args, "attachmentName"),
             isRead: typeof args.isRead === "boolean" ? args.isRead : undefined,
             isStarred: typeof args.isStarred === "boolean" ? args.isStarred : undefined,
+            mailboxRole: optionalString(args, "mailboxRole"),
             dateFrom: optionalString(args, "dateFrom"),
             dateTo: optionalString(args, "dateTo"),
             limit: typeof args.limit === "number" ? args.limit : undefined,
@@ -3154,6 +3332,91 @@ export function createServer(
                   )
                   .map(threadSource)
               : [],
+          );
+        }
+
+        case "find_document_threads":
+        {
+          await maybeRefreshLocalIndex(imapService, localIndexService, {
+            force: normalizeBoolean(args.syncBefore, false),
+            folder: "INBOX",
+            limitPerFolder: 100,
+          });
+          const result = await localIndexService.findDocumentThreads({
+            category:
+              args.category === "document" ||
+              args.category === "invoice" ||
+              args.category === "contract" ||
+              args.category === "travel" ||
+              args.category === "calendar"
+                ? args.category
+                : undefined,
+            query: optionalString(args, "query"),
+            limit: typeof args.limit === "number" ? args.limit : undefined,
+          });
+          const threads = Array.isArray(result.threads) ? result.threads : [];
+          return createTextResult(
+            result,
+            false,
+            threads
+              .filter((thread): thread is { id: string; subject: string; latestDate?: string; messageCount: number; normalizedLabels?: string[]; participants?: EmailAddress[] } =>
+                Boolean(thread && typeof thread === "object" && "id" in thread),
+              )
+              .map(threadSource),
+          );
+        }
+
+        case "prepare_meeting_context":
+        {
+          await maybeRefreshLocalIndex(imapService, localIndexService, {
+            force: normalizeBoolean(args.syncBefore, false),
+            folder: "INBOX",
+            limitPerFolder: 100,
+          });
+          const result = await localIndexService.getMeetingPrep({
+            person: optionalString(args, "person"),
+            domain: optionalString(args, "domain"),
+            limit: typeof args.limit === "number" ? args.limit : undefined,
+          });
+          const threads = Array.isArray(result.threads) ? result.threads : [];
+          return createTextResult(
+            result,
+            false,
+            threads
+              .filter((thread): thread is { id: string; subject: string; latestDate?: string; messageCount: number; normalizedLabels?: string[]; participants?: EmailAddress[] } =>
+                Boolean(thread && typeof thread === "object" && "id" in thread),
+              )
+              .map(threadSource),
+          );
+        }
+
+        case "get_thread_brief":
+        {
+          await maybeRefreshLocalIndex(imapService, localIndexService, {
+            folder: "INBOX",
+            limitPerFolder: 100,
+          });
+          const thread = await localIndexService.getThreadById(requireString(args, "threadId"));
+          const result = buildThreadBrief(thread, config.smtp.username);
+          return createTextResult(
+            result,
+            false,
+            [
+              threadSource(thread),
+              ...thread.messages.map((message) =>
+                emailSource({
+                  id: message.primaryEmailId,
+                  subject: message.subject,
+                  folder: message.folder,
+                  date: message.date,
+                  internalDate: message.internalDate,
+                  preview: message.preview,
+                  from: message.from,
+                  messageId: message.messageId,
+                  threadId: thread.id,
+                }),
+              ),
+            ],
           );
         }
 
@@ -3298,6 +3561,7 @@ export function createServer(
               action,
               targetFolder: optionalString(args, "targetFolder"),
               continueOnError: normalizeBoolean(args.continueOnError, true),
+              dryRun: normalizeBoolean(args.dryRun, false),
             }),
           );
 
@@ -3310,6 +3574,7 @@ export function createServer(
             {
               threadId: thread.id,
               unreadOnly,
+              dryRun: normalizeBoolean(args.dryRun, false),
               ...result,
             },
             false,

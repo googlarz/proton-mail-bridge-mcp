@@ -280,3 +280,245 @@ test("local index imports a legacy JSON snapshot into SQLite once", async () => 
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("indexed search supports domain and label normalization shortcuts", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "protonmail-search-shortcut-test-"));
+  const service = new LocalIndexService(createConfig(dataDir));
+
+  try {
+    await service.recordSnapshot({
+      syncedAt: "2026-03-25T10:00:00.000Z",
+      folders: [
+        {
+          path: "INBOX",
+          name: "INBOX",
+          delimiter: "/",
+          specialUse: "\\Inbox",
+          listed: true,
+          subscribed: true,
+          flags: [],
+          messages: 2,
+          unseen: 1,
+        },
+      ],
+      folderStats: [{ folder: "INBOX", fetched: 2, total: 2, strategy: "recent" }],
+      emails: [
+        {
+          id: "INBOX::21",
+          folder: "INBOX",
+          uid: 21,
+          seq: 21,
+          messageId: "<vendor@example.com>",
+          subject: "Invoice for March",
+          from: [{ address: "billing@example.com" }],
+          to: [{ address: "owner@example.com" }],
+          cc: [],
+          bcc: [],
+          replyTo: [],
+          date: "2026-03-25T09:00:00.000Z",
+          internalDate: "2026-03-25T09:00:00.000Z",
+          isRead: false,
+          isStarred: false,
+          flags: [],
+          preview: "Please find your invoice attached",
+          hasAttachments: true,
+          attachments: [{ filename: "invoice.pdf", contentType: "application/pdf", kind: "document" }],
+          labels: ["Labels/Finance"],
+        },
+        {
+          id: "INBOX::22",
+          folder: "INBOX",
+          uid: 22,
+          seq: 22,
+          messageId: "<other@another.com>",
+          subject: "Status update",
+          from: [{ address: "person@another.com" }],
+          to: [{ address: "owner@example.com" }],
+          cc: [],
+          bcc: [],
+          replyTo: [],
+          date: "2026-03-25T08:00:00.000Z",
+          internalDate: "2026-03-25T08:00:00.000Z",
+          isRead: true,
+          isStarred: false,
+          flags: ["\\Seen"],
+          preview: "Quick update",
+          hasAttachments: false,
+          attachments: [],
+          labels: [],
+        },
+      ],
+    });
+
+    const result = await service.search({
+      query: "domain:example.com label:Finance invoice",
+      limit: 10,
+    });
+
+    assert.equal(result.total, 1);
+    assert.equal(result.emails[0].id, "INBOX::21");
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("document threads groups invoice and calendar-heavy messages", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "protonmail-document-thread-test-"));
+  const service = new LocalIndexService(createConfig(dataDir));
+
+  try {
+    await service.recordSnapshot({
+      syncedAt: "2026-03-25T10:00:00.000Z",
+      folders: [
+        {
+          path: "INBOX",
+          name: "INBOX",
+          delimiter: "/",
+          specialUse: "\\Inbox",
+          listed: true,
+          subscribed: true,
+          flags: [],
+          messages: 2,
+          unseen: 1,
+        },
+      ],
+      folderStats: [{ folder: "INBOX", fetched: 2, total: 2, strategy: "recent" }],
+      emails: [
+        {
+          id: "INBOX::31",
+          folder: "INBOX",
+          uid: 31,
+          seq: 31,
+          messageId: "<invoice@example.com>",
+          subject: "Invoice package",
+          from: [{ address: "billing@example.com" }],
+          to: [{ address: "owner@example.com" }],
+          cc: [],
+          bcc: [],
+          replyTo: [],
+          date: "2026-03-25T09:00:00.000Z",
+          internalDate: "2026-03-25T09:00:00.000Z",
+          isRead: false,
+          isStarred: false,
+          flags: [],
+          preview: "Invoice attached",
+          hasAttachments: true,
+          attachments: [{ filename: "invoice.pdf", contentType: "application/pdf", kind: "document" }],
+          labels: [],
+        },
+        {
+          id: "INBOX::32",
+          folder: "INBOX",
+          uid: 32,
+          seq: 32,
+          messageId: "<invite@example.com>",
+          subject: "Board meeting invite",
+          from: [{ address: "assistant@example.com" }],
+          to: [{ address: "owner@example.com" }],
+          cc: [],
+          bcc: [],
+          replyTo: [],
+          date: "2026-03-25T09:30:00.000Z",
+          internalDate: "2026-03-25T09:30:00.000Z",
+          isRead: false,
+          isStarred: false,
+          flags: [],
+          preview: "Calendar invite attached",
+          hasAttachments: true,
+          attachments: [{ filename: "invite.ics", contentType: "text/calendar", kind: "calendar", isCalendarInvite: true }],
+          labels: [],
+        },
+      ],
+    });
+
+    const invoices = await service.findDocumentThreads({ category: "invoice", limit: 10 });
+    const calendars = await service.findDocumentThreads({ category: "calendar", limit: 10 });
+
+    assert.equal(invoices.total, 1);
+    assert.equal(invoices.threads[0].documents[0].filename, "invoice.pdf");
+    assert.equal(calendars.total, 1);
+    assert.equal(calendars.threads[0].documents[0].filename, "invite.ics");
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("meeting prep filters threads by domain and exposes latest inbound context", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "protonmail-meeting-prep-test-"));
+  const service = new LocalIndexService(createConfig(dataDir));
+
+  try {
+    await service.recordSnapshot({
+      syncedAt: "2026-03-25T10:00:00.000Z",
+      folders: [
+        {
+          path: "INBOX",
+          name: "INBOX",
+          delimiter: "/",
+          specialUse: "\\Inbox",
+          listed: true,
+          subscribed: true,
+          flags: [],
+          messages: 2,
+          unseen: 1,
+        },
+      ],
+      folderStats: [{ folder: "INBOX", fetched: 2, total: 2, strategy: "recent" }],
+      emails: [
+        {
+          id: "INBOX::41",
+          folder: "INBOX",
+          uid: 41,
+          seq: 41,
+          messageId: "<root@partner.com>",
+          subject: "Partner kickoff",
+          from: [{ address: "alice@partner.com" }],
+          to: [{ address: "owner@example.com" }],
+          cc: [],
+          bcc: [],
+          replyTo: [],
+          date: "2026-03-25T08:00:00.000Z",
+          internalDate: "2026-03-25T08:00:00.000Z",
+          isRead: false,
+          isStarred: false,
+          flags: [],
+          preview: "Can we meet tomorrow?",
+          hasAttachments: false,
+          attachments: [],
+          labels: [],
+        },
+        {
+          id: "INBOX::42",
+          folder: "INBOX",
+          uid: 42,
+          seq: 42,
+          messageId: "<reply@partner.com>",
+          inReplyTo: "<root@partner.com>",
+          references: ["<root@partner.com>"],
+          subject: "Re: Partner kickoff",
+          from: [{ address: "owner@example.com" }],
+          to: [{ address: "alice@partner.com" }],
+          cc: [],
+          bcc: [],
+          replyTo: [],
+          date: "2026-03-25T09:00:00.000Z",
+          internalDate: "2026-03-25T09:00:00.000Z",
+          isRead: true,
+          isStarred: false,
+          flags: ["\\Seen"],
+          preview: "Tomorrow works for me.",
+          hasAttachments: false,
+          attachments: [],
+          labels: [],
+        },
+      ],
+    });
+
+    const prep = await service.getMeetingPrep({ domain: "partner.com", limit: 10 });
+
+    assert.equal(prep.totalThreads, 1);
+    assert.equal(prep.latestInbound[0].emailId, "INBOX::41");
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});

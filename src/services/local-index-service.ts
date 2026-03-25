@@ -17,8 +17,10 @@ import type {
 } from "../types/index.js";
 import {
   dedupeEmails,
+  extractDomain,
   extractMessageIdList,
   lowerCaseAddress,
+  normalizeMailboxLabel,
   normalizeMessageId,
   normalizeSubjectForThread,
   sortEmailsByNewest,
@@ -80,33 +82,100 @@ type MessageRow = {
   labels_json: string;
 };
 
-const DB_SCHEMA_VERSION = 2;
+const DB_SCHEMA_VERSION = 3;
 const STALE_THRESHOLD_MINUTES = 60;
 
+type ParsedSearchQuery = {
+  residualTerms: string[];
+  senderDomain?: string;
+  label?: string;
+  from?: string;
+  to?: string;
+  subject?: string;
+};
+
+function parseSearchQuery(query?: string): ParsedSearchQuery {
+  const parsed: ParsedSearchQuery = { residualTerms: [] };
+
+  for (const rawToken of query?.trim().split(/\s+/) ?? []) {
+    const separator = rawToken.indexOf(":");
+    if (separator <= 0) {
+      parsed.residualTerms.push(rawToken);
+      continue;
+    }
+
+    const key = rawToken.slice(0, separator).toLowerCase();
+    const value = rawToken.slice(separator + 1).trim();
+    if (!value) {
+      continue;
+    }
+
+    switch (key) {
+      case "domain":
+      case "fromdomain":
+        parsed.senderDomain = value.toLowerCase();
+        break;
+      case "label":
+        parsed.label = value;
+        break;
+      case "from":
+        parsed.from = value;
+        break;
+      case "to":
+        parsed.to = value;
+        break;
+      case "subject":
+        parsed.subject = value;
+        break;
+      default:
+        parsed.residualTerms.push(rawToken);
+        break;
+    }
+  }
+
+  return parsed;
+}
+
 function matchesIndexedSearch(email: EmailSummary, filters: SearchEmailsInput): boolean {
-  if (filters.folder && email.folder !== filters.folder) {
+  const parsedQuery = parseSearchQuery(filters.query);
+  const normalizedFilters: SearchEmailsInput = {
+    ...filters,
+    query: parsedQuery.residualTerms.join(" ") || undefined,
+    senderDomain: filters.senderDomain || parsedQuery.senderDomain,
+    label: filters.label || parsedQuery.label,
+    from: filters.from || parsedQuery.from,
+    to: filters.to || parsedQuery.to,
+    subject: filters.subject || parsedQuery.subject,
+  };
+
+  if (normalizedFilters.folder && email.folder !== normalizedFilters.folder) {
     return false;
   }
 
-  if (filters.label) {
-    const labelNeedle = filters.label.toLowerCase();
-    const folderMatch = email.folder.toLowerCase() === labelNeedle;
-    const labelMatch = email.labels.some((label) => label.toLowerCase() === labelNeedle);
+  if (normalizedFilters.label) {
+    const labelNeedle = normalizedFilters.label.toLowerCase();
+    const folderMatch = normalizeMailboxLabel(email.folder)?.toLowerCase() === labelNeedle;
+    const labelMatch = email.labels.some(
+      (label) => normalizeMailboxLabel(label)?.toLowerCase() === labelNeedle,
+    );
     if (!folderMatch && !labelMatch) {
       return false;
     }
   }
 
-  if (filters.threadId && email.threadId !== filters.threadId) {
+  if (normalizedFilters.threadId && email.threadId !== normalizedFilters.threadId) {
     return false;
   }
 
-  if (typeof filters.hasAttachment === "boolean" && email.hasAttachments !== filters.hasAttachment) {
+  if (
+    typeof normalizedFilters.hasAttachment === "boolean" &&
+    email.hasAttachments !== normalizedFilters.hasAttachment
+  ) {
     return false;
   }
 
-  if (filters.attachmentName) {
-    const attachmentNeedle = filters.attachmentName.toLowerCase();
+  if (normalizedFilters.attachmentName) {
+    const attachmentNeedle = normalizedFilters.attachmentName.toLowerCase();
     const match = email.attachments.some((attachment) =>
       (attachment.filename || "").toLowerCase().includes(attachmentNeedle),
     );
@@ -115,11 +184,11 @@ function matchesIndexedSearch(email: EmailSummary, filters: SearchEmailsInput): 
     }
   }
 
-  if (typeof filters.isRead === "boolean" && email.isRead !== filters.isRead) {
+  if (typeof normalizedFilters.isRead === "boolean" && email.isRead !== normalizedFilters.isRead) {
     return false;
   }
 
-  if (typeof filters.isStarred === "boolean" && email.isStarred !== filters.isStarred) {
+  if (typeof normalizedFilters.isStarred === "boolean" && email.isStarred !== normalizedFilters.isStarred) {
     return false;
   }
 
@@ -136,16 +205,19 @@ function matchesIndexedSearch(email: EmailSummary, filters: SearchEmailsInput): 
     .join("\n")
     .toLowerCase();
 
-  if (filters.query && !haystacks.includes(filters.query.toLowerCase())) {
+  if (normalizedFilters.query && !haystacks.includes(normalizedFilters.query.toLowerCase())) {
     return false;
   }
 
-  if (filters.subject && !email.subject.toLowerCase().includes(filters.subject.toLowerCase())) {
+  if (
+    normalizedFilters.subject &&
+    !email.subject.toLowerCase().includes(normalizedFilters.subject.toLowerCase())
+  ) {
     return false;
   }
 
-  if (filters.from) {
-    const fromNeedle = filters.from.toLowerCase();
+  if (normalizedFilters.from) {
+    const fromNeedle = normalizedFilters.from.toLowerCase();
     const match = email.from.some((value) =>
       `${value.name ?? ""} ${value.address ?? ""}`.toLowerCase().includes(fromNeedle),
     );
@@ -154,8 +226,8 @@ function matchesIndexedSearch(email: EmailSummary, filters: SearchEmailsInput): 
     }
   }
 
-  if (filters.to) {
-    const toNeedle = filters.to.toLowerCase();
+  if (normalizedFilters.to) {
+    const toNeedle = normalizedFilters.to.toLowerCase();
     const recipients = [...email.to, ...email.cc, ...email.bcc];
     const match = recipients.some((value) =>
       `${value.name ?? ""} ${value.address ?? ""}`.toLowerCase().includes(toNeedle),
@@ -165,15 +237,24 @@ function matchesIndexedSearch(email: EmailSummary, filters: SearchEmailsInput): 
     }
   }
 
-  const emailDate = email.internalDate || email.date;
-  if (filters.dateFrom && emailDate) {
-    if (new Date(emailDate).getTime() < new Date(filters.dateFrom).getTime()) {
+  if (normalizedFilters.senderDomain) {
+    const match = email.from.some(
+      (value) => extractDomain(value.address || "") === normalizedFilters.senderDomain,
+    );
+    if (!match) {
       return false;
     }
   }
 
-  if (filters.dateTo && emailDate) {
-    if (new Date(emailDate).getTime() > new Date(filters.dateTo).getTime()) {
+  const emailDate = email.internalDate || email.date;
+  if (normalizedFilters.dateFrom && emailDate) {
+    if (new Date(emailDate).getTime() < new Date(normalizedFilters.dateFrom).getTime()) {
+      return false;
+    }
+  }
+
+  if (normalizedFilters.dateTo && emailDate) {
+    if (new Date(emailDate).getTime() > new Date(normalizedFilters.dateTo).getTime()) {
       return false;
     }
   }
@@ -211,13 +292,39 @@ function specialUseToRole(specialUse?: string, folderPath?: string): string {
       return "trash";
     case "\\Archive":
       return "archive";
+    case "\\Junk":
+      return "spam";
     default:
-      return folderPath ? folderPath.toLowerCase() : "folder";
+      return normalizeMailboxLabel(folderPath)?.toLowerCase() || "folder";
   }
 }
 
 function friendlySpecialUse(specialUse?: string): string | undefined {
-  return specialUse?.replace(/^\\/, "");
+  return normalizeMailboxLabel(specialUse?.replace(/^\\/, ""));
+}
+
+function normalizedMailboxLabelsFor(email: EmailSummary, folder?: FolderInfo): string[] {
+  const labels = new Set<string>();
+
+  const add = (value?: string) => {
+    const normalized = normalizeMailboxLabel(value);
+    if (normalized) {
+      labels.add(normalized);
+    }
+  };
+
+  add(email.folder);
+  for (const label of email.labels) {
+    add(label);
+  }
+  add(folder?.specialUse?.replace(/^\\/, ""));
+
+  const pathParts = email.folder.split("/");
+  if (pathParts.length > 1) {
+    add(pathParts[pathParts.length - 1]);
+  }
+
+  return [...labels].sort((left, right) => left.localeCompare(right));
 }
 
 function locationScore(location: { email: EmailSummary; folder?: FolderInfo }): number {
@@ -250,6 +357,9 @@ function locationScore(location: { email: EmailSummary; folder?: FolderInfo }): 
   }
   if (location.email.hasAttachments) {
     score += 1;
+  }
+  if (location.email.isStarred) {
+    score += 2;
   }
 
   return score;
@@ -340,12 +450,13 @@ function emailToSearchParts(email: EmailSummary): {
   attachmentNames: string;
 } {
   return {
-    labels: [email.folder, ...email.labels].join(" "),
+    labels: [normalizeMailboxLabel(email.folder) || email.folder, ...email.labels.map((label) => normalizeMailboxLabel(label) || label)].join(" "),
     participants: [...email.from, ...email.to, ...email.cc, ...email.bcc]
-      .map((value) => `${value.name ?? ""} ${value.address ?? ""}`.trim())
+      .map((value) => `${value.name ?? ""} ${value.address ?? ""} ${extractDomain(value.address || "") ?? ""}`.trim())
       .join(" "),
     attachmentNames: [
       ...email.attachments.map((attachment) => attachment.filename || ""),
+      ...email.attachments.map((attachment) => attachment.kind || ""),
       email.attachmentText || "",
     ]
       .join(" ")
@@ -369,6 +480,36 @@ function fallbackThreadKey(message: EmailSummary, ownerEmail?: string): string {
     message,
     ownerEmail,
   )}`;
+}
+
+function searchRelevanceScore(email: EmailSummary, filters: SearchEmailsInput): number {
+  const parsedQuery = parseSearchQuery(filters.query);
+  const residual = parsedQuery.residualTerms.join(" ").toLowerCase();
+  const fullParticipants = [...email.from, ...email.to, ...email.cc, ...email.bcc]
+    .map((value) => `${value.name ?? ""} ${value.address ?? ""}`.trim().toLowerCase())
+    .join("\n");
+  let score = 0;
+
+  if (residual) {
+    if (email.subject.toLowerCase().includes(residual)) score += 12;
+    if ((email.preview || "").toLowerCase().includes(residual)) score += 8;
+    if ((email.attachmentText || "").toLowerCase().includes(residual)) score += 5;
+    if (fullParticipants.includes(residual)) score += 6;
+  }
+  if ((filters.senderDomain || parsedQuery.senderDomain) && email.from.some((entry) => extractDomain(entry.address || "") === (filters.senderDomain || parsedQuery.senderDomain))) {
+    score += 4;
+  }
+  if (email.hasAttachments) score += 1;
+  if (!email.isRead) score += 2;
+  if (email.isStarred) score += 2;
+
+  const timestamp = new Date(email.internalDate || email.date || 0).getTime();
+  if (timestamp > 0) {
+    const ageHours = Math.max(0, (Date.now() - timestamp) / (60 * 60 * 1000));
+    score += Math.max(0, 3 - ageHours / 48);
+  }
+
+  return score;
 }
 
 export class LocalIndexService {
@@ -406,26 +547,45 @@ export class LocalIndexService {
     total: number;
     emails: EmailSummary[];
   }> {
-    if (filters.threadId?.trim()) {
+    const parsedQuery = parseSearchQuery(filters.query);
+    const normalizedFilters: SearchEmailsInput = {
+      ...filters,
+      query: parsedQuery.residualTerms.join(" ") || undefined,
+      senderDomain: filters.senderDomain || parsedQuery.senderDomain,
+      label: filters.label || parsedQuery.label,
+      from: filters.from || parsedQuery.from,
+      to: filters.to || parsedQuery.to,
+      subject: filters.subject || parsedQuery.subject,
+    };
+
+    if (normalizedFilters.threadId?.trim()) {
       const snapshot = await this.loadSnapshot();
-      const thread = (this.buildThreads(snapshot, true) as ThreadDetail[]).find((entry) => entry.id === filters.threadId);
+      const thread = (this.buildThreads(snapshot, true) as ThreadDetail[]).find(
+        (entry) => entry.id === normalizedFilters.threadId,
+      );
       if (thread) {
         const threadMessages = sortEmailsByNewest(thread.messages).filter((email) =>
-          matchesIndexedSearch(email, { ...filters, threadId: undefined }),
-        );
+          matchesIndexedSearch(email, { ...normalizedFilters, threadId: undefined }),
+        ).sort((left, right) => searchRelevanceScore(right, normalizedFilters) - searchRelevanceScore(left, normalizedFilters));
         return {
           total: threadMessages.length,
-          emails: threadMessages.slice(0, filters.limit ?? 100),
+          emails: threadMessages.slice(0, normalizedFilters.limit ?? 100),
         };
       }
     }
 
     const db = await this.ensureDb();
-    const limit = filters.limit ?? 100;
-    const emails = this.loadCandidateEmails(db, filters, Math.max(limit * 10, 500));
-    const matches = sortEmailsByNewest(dedupeEmails(emails)).filter((email) =>
-      matchesIndexedSearch(email, filters),
-    );
+    const limit = normalizedFilters.limit ?? 100;
+    const emails = this.loadCandidateEmails(db, normalizedFilters, Math.max(limit * 10, 500));
+    const matches = dedupeEmails(emails)
+      .filter((email) => matchesIndexedSearch(email, normalizedFilters))
+      .sort((left, right) => {
+        const scoreDelta = searchRelevanceScore(right, normalizedFilters) - searchRelevanceScore(left, normalizedFilters);
+        if (scoreDelta !== 0) {
+          return scoreDelta;
+        }
+        return sortEmailsByNewest([left, right])[0] === left ? -1 : 1;
+      });
 
     return {
       total: matches.length,
@@ -504,7 +664,13 @@ export class LocalIndexService {
         counts.set(id, existing);
       };
 
-      addCount(`folder:${message.folder.toLowerCase()}`, message.folder, "folder", folderInfo?.specialUse);
+      const normalizedFolderName = normalizeMailboxLabel(message.folder) || message.folder;
+      addCount(
+        `folder:${normalizedFolderName.toLowerCase()}`,
+        normalizedFolderName,
+        "folder",
+        folderInfo?.specialUse,
+      );
 
       if (folderInfo?.specialUse) {
         const friendly = friendlySpecialUse(folderInfo.specialUse) || folderInfo.specialUse;
@@ -769,6 +935,135 @@ export class LocalIndexService {
       pendingOn,
       total: candidates.length,
       threads: candidates.slice(0, input.limit ?? 25),
+    };
+  }
+
+  async findDocumentThreads(input: {
+    category?: "document" | "invoice" | "contract" | "travel" | "calendar";
+    query?: string;
+    limit?: number;
+  } = {}): Promise<Record<string, unknown>> {
+    const snapshot = await this.loadSnapshot();
+    const category = input.category || "document";
+    const limit = input.limit ?? 25;
+    const keywordMap: Record<string, string[]> = {
+      document: ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "contract", "invoice", "receipt", "ticket"],
+      invoice: ["invoice", "receipt", "bill", "payment"],
+      contract: ["contract", "agreement", "msa", "dpa", "proposal"],
+      travel: ["itinerary", "ticket", "booking", "reservation", "boarding", "hotel", "flight"],
+      calendar: ["calendar", "invite", "meeting", "ics"],
+    };
+    const keywords = keywordMap[category] ?? keywordMap.document;
+
+    const matches = (this.buildThreads(snapshot, true) as ThreadDetail[])
+      .map((thread) => {
+        const documents = thread.messages.flatMap((message) =>
+          message.attachments.filter((attachment) => {
+            const haystack = [
+              attachment.filename || "",
+              attachment.contentType || "",
+              attachment.kind || "",
+              message.subject,
+              message.preview || "",
+              message.attachmentText || "",
+            ]
+              .join(" ")
+              .toLowerCase();
+            return keywords.some((keyword) => haystack.includes(keyword));
+          }).map((attachment) => ({
+            emailId: message.primaryEmailId,
+            subject: message.subject,
+            filename: attachment.filename,
+            kind: attachment.kind,
+            contentType: attachment.contentType,
+          })),
+        );
+
+        return {
+          ...thread,
+          documents,
+        };
+      })
+      .filter((thread) => {
+        if (thread.documents.length === 0) {
+          return false;
+        }
+        if (!input.query) {
+          return true;
+        }
+        const haystack = [
+          thread.subject,
+          ...thread.documents.map((document) => `${document.filename || ""} ${document.subject}`),
+        ]
+          .join("\n")
+          .toLowerCase();
+        return haystack.includes(input.query.toLowerCase());
+      })
+      .sort((left, right) => {
+        if (right.documents.length !== left.documents.length) {
+          return right.documents.length - left.documents.length;
+        }
+        return new Date(right.latestDate || 0).getTime() - new Date(left.latestDate || 0).getTime();
+      });
+
+    return {
+      generatedAt: new Date().toISOString(),
+      indexUpdatedAt: snapshot.updatedAt,
+      category,
+      total: matches.length,
+      threads: matches.slice(0, limit),
+    };
+  }
+
+  async getMeetingPrep(input: {
+    person?: string;
+    domain?: string;
+    limit?: number;
+  }): Promise<Record<string, unknown>> {
+    const snapshot = await this.loadSnapshot();
+    const personNeedle = input.person?.toLowerCase();
+    const domainNeedle = input.domain?.toLowerCase();
+    const limit = input.limit ?? 10;
+    const threads = (this.buildThreads(snapshot, true) as ThreadDetail[])
+      .filter((thread) =>
+        thread.participants.some((participant) => {
+          const participantText = `${participant.name ?? ""} ${participant.address ?? ""}`.toLowerCase();
+          const participantDomain = extractDomain(participant.address || "");
+          if (personNeedle && participantText.includes(personNeedle)) {
+            return true;
+          }
+          if (domainNeedle && participantDomain === domainNeedle) {
+            return true;
+          }
+          return false;
+        }),
+      )
+      .slice(0, limit);
+
+    const latestInbound = threads.flatMap((thread) =>
+      [...thread.messages]
+        .reverse()
+        .find((message) => !isOutgoingMessage(message, snapshot.ownerEmail))
+        ? [([...thread.messages].reverse().find((message) => !isOutgoingMessage(message, snapshot.ownerEmail)) as MailboxMessage)]
+        : [],
+    );
+
+    return {
+      generatedAt: new Date().toISOString(),
+      indexUpdatedAt: snapshot.updatedAt,
+      filters: {
+        person: input.person,
+        domain: input.domain,
+      },
+      totalThreads: threads.length,
+      threads,
+      latestInbound: latestInbound.slice(0, limit).map((message) => ({
+        emailId: message.primaryEmailId,
+        subject: message.subject,
+        from: message.from,
+        date: message.internalDate || message.date,
+        preview: message.preview,
+      })),
     };
   }
 
@@ -1190,6 +1485,10 @@ export class LocalIndexService {
       conditions.push(`LOWER(subject) LIKE ?`);
       params.push(`%${filters.subject.toLowerCase()}%`);
     }
+    if (filters.senderDomain) {
+      conditions.push(`LOWER(from_json) LIKE ?`);
+      params.push(`%${filters.senderDomain.toLowerCase()}%`);
+    }
     if (filters.threadId) {
       conditions.push(`thread_id = ?`);
       params.push(filters.threadId);
@@ -1217,9 +1516,8 @@ export class LocalIndexService {
   }
 
   private searchFtsIds(db: Database.Database, query: string, limit: number): string[] {
-    const match = query
-      .trim()
-      .split(/\s+/)
+    const parsed = parseSearchQuery(query);
+    const match = parsed.residualTerms
       .map((token) => `"${token.replace(/"/g, '""')}"`)
       .join(" AND ");
 
@@ -1404,29 +1702,14 @@ export class LocalIndexService {
           isStarred: email.isStarred,
         }));
 
-        const normalizedLabels = new Set<string>();
-        for (const entry of entries) {
-          normalizedLabels.add(entry.email.folder);
-          for (const label of entry.email.labels) {
-            normalizedLabels.add(label);
-          }
-          const friendly = friendlySpecialUse(entry.folder?.specialUse);
-          if (friendly) {
-            normalizedLabels.add(friendly);
-          }
-          const pathParts = entry.email.folder.split("/");
-          if (pathParts.length > 1) {
-            normalizedLabels.add(pathParts[pathParts.length - 1]);
-          }
-        }
-
         return {
           ...primary,
           canonicalId,
           primaryEmailId: primary.id,
           threadKey: threadKeyForEmail(primary),
           mailboxRole: specialUseToRole(primaryFolder?.specialUse, primary.folder),
-          normalizedLabels: [...normalizedLabels].sort((left, right) => left.localeCompare(right)),
+          normalizedLabels: [...new Set(entries.flatMap((entry) => normalizedMailboxLabelsFor(entry.email, entry.folder)))]
+            .sort((left, right) => left.localeCompare(right)),
           locations: locations.sort((left, right) => right.uid - left.uid),
         };
       }),

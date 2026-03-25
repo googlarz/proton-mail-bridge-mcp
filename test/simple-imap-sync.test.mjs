@@ -46,3 +46,27 @@ test("planFolderSync falls back to recent when uidValidity changed", () => {
   assert.equal(plan.startUid, 76);
   assert.equal(plan.endUid, 100);
 });
+
+test("planFolderSync treats mailbox count drift as a changed incremental window", () => {
+  const plan = planFolderSync({
+    folder: "INBOX",
+    exists: 140,
+    uidNext: 151,
+    uidValidity: "999",
+    full: false,
+    limit: 50,
+    checkpoint: {
+      folder: "INBOX",
+      uidValidity: "999",
+      uidNext: 151,
+      highestUid: 150,
+      total: 141,
+      lastSyncAt: "2026-03-24T12:00:00.000Z",
+    },
+  });
+
+  assert.equal(plan.strategy, "incremental");
+  assert.equal(plan.changed, true);
+  assert.equal(plan.startUid, 126);
+  assert.equal(plan.endUid, 150);
+});

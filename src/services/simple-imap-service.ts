@@ -16,6 +16,7 @@ import type {
   SyncEmailsInput,
 } from "../types/index.js";
 import {
+  classifyAttachment,
   createEmailId,
   dedupeEmails,
   extractAttachments,
@@ -32,6 +33,7 @@ import {
   sanitizeFileName,
   sortEmailsByNewest,
   stripHtmlToText,
+  summarizeCalendarText,
 } from "../utils/helpers.js";
 import { logger, type Logger } from "../utils/logger.js";
 
@@ -51,6 +53,53 @@ const FETCH_DETAIL_QUERY = {
 } as const;
 
 const MAX_ATTACHMENT_TEXT_BYTES = 512_000;
+
+export function isLikelyAuthenticationError(error: unknown): boolean {
+  if (!error) {
+    return false;
+  }
+
+  const values: string[] = [];
+
+  if (error instanceof Error) {
+    values.push(error.message);
+    values.push(error.name);
+    const maybeResponseText = (error as { responseText?: unknown }).responseText;
+    if (typeof maybeResponseText === "string") {
+      values.push(maybeResponseText);
+    }
+  } else if (typeof error === "string") {
+    values.push(error);
+  } else if (typeof error === "object") {
+    const maybeMessage = (error as { message?: unknown }).message;
+    const maybeCode = (error as { code?: unknown }).code;
+    const maybeResponse = (error as { response?: unknown }).response;
+    if (typeof maybeMessage === "string") {
+      values.push(maybeMessage);
+    }
+    if (typeof maybeCode === "string") {
+      values.push(maybeCode);
+    }
+    if (typeof maybeResponse === "string") {
+      values.push(maybeResponse);
+    }
+  }
+
+  const haystack = values.join(" ").toLowerCase();
+  if (!haystack) {
+    return false;
+  }
+
+  return [
+    "auth",
+    "login failed",
+    "incorrect login credentials",
+    "invalid credentials",
+    "authentication failed",
+    "no such user",
+    "too many login attempts",
+  ].some((needle) => haystack.includes(needle));
+}
 
 export interface FolderSyncPlan {
   folder: string;
@@ -108,8 +157,11 @@ export function planFolderSync(input: {
     };
   }
 
-  const overlap = Math.min(input.limit, 25);
-  const changed = highestKnownUid > (input.checkpoint.highestUid ?? 0) || uidNext !== (input.checkpoint.uidNext ?? uidNext);
+  const overlap = Math.min(input.limit, Math.max(25, Math.min(100, Math.ceil(input.limit / 2))));
+  const changed =
+    highestKnownUid > (input.checkpoint.highestUid ?? 0) ||
+    uidNext !== (input.checkpoint.uidNext ?? uidNext) ||
+    input.exists !== (input.checkpoint.total ?? input.exists);
   return {
     folder: input.folder,
     strategy: changed ? "incremental" : "incremental_window",
@@ -242,6 +294,21 @@ export class SimpleIMAPService {
     const folder = input.folder?.trim() || "INBOX";
     const timeoutMs = normalizeLimit(input.timeoutMs, this.config.runtime.idleMaxSeconds * 1000, 1_000, 300_000);
     const client = await this.ensureConnected();
+    return this.waitForMailboxChangesWithClient(client, folder, timeoutMs, true);
+  }
+
+  private async waitForMailboxChangesWithClient(
+    client: ImapFlow,
+    folder: string,
+    timeoutMs: number,
+    allowReconnectRetry: boolean,
+  ): Promise<{
+    folder: string;
+    timeoutMs: number;
+    checkedAt: string;
+    changed: boolean;
+    events: Array<Record<string, unknown>>;
+  }> {
     const idleClient = client as unknown as {
       maxIdleTime?: number | false;
       preCheck?: false | (() => Promise<void>);
@@ -311,6 +378,11 @@ export class SimpleIMAPService {
       };
     } catch (error) {
       this.lastIdleError = error instanceof Error ? error.message : String(error);
+      if (allowReconnectRetry && !isLikelyAuthenticationError(error)) {
+        await this.disconnect();
+        const freshClient = await this.ensureConnected();
+        return this.waitForMailboxChangesWithClient(freshClient, folder, timeoutMs, false);
+      }
       throw error;
     } finally {
       clearTimeout(timeout);
@@ -537,12 +609,17 @@ export class SimpleIMAPService {
         cid: attachment.cid,
         checksum: attachment.checksum,
         isInline: attachment.isInline,
+        kind: attachment.kind,
+        isCalendarInvite: attachment.isCalendarInvite,
+        isSignature: attachment.isSignature,
       },
       text:
         attachment.content.length <= MAX_ATTACHMENT_TEXT_BYTES
           ? attachment.contentType?.toLowerCase() === "text/html"
             ? stripHtmlToText(attachment.content.toString("utf8"))
-            : isTextLikeMimeType(attachment.contentType) || attachment.contentType?.toLowerCase() === "text/calendar"
+            : attachment.contentType?.toLowerCase() === "text/calendar"
+              ? summarizeCalendarText(attachment.content.toString("utf8"))
+              : isTextLikeMimeType(attachment.contentType)
               ? attachment.content.toString("utf8")
               : undefined
           : undefined,
@@ -571,6 +648,9 @@ export class SimpleIMAPService {
         cid: attachment.cid,
         checksum: attachment.checksum,
         isInline: attachment.isInline,
+        kind: attachment.kind,
+        isCalendarInvite: attachment.isCalendarInvite,
+        isSignature: attachment.isSignature,
       },
       outputPath: path,
     };
@@ -1186,7 +1266,11 @@ export class SimpleIMAPService {
           return [stripHtmlToText(attachment.content.toString("utf8")) || ""];
         }
 
-        if (isTextLikeMimeType(contentType) || contentType === "text/calendar") {
+        if (contentType === "text/calendar") {
+          return [summarizeCalendarText(attachment.content.toString("utf8")) || ""];
+        }
+
+        if (isTextLikeMimeType(contentType)) {
           return [previewText(attachment.content.toString("utf8"), 8_000) || ""];
         }
 
@@ -1198,16 +1282,28 @@ export class SimpleIMAPService {
   }
 
   private mapParsedAttachments(parsed?: ParsedMail): EmailDetail["attachments"] {
-    return (parsed?.attachments ?? []).map((attachment, index) => ({
-      id: createParsedAttachmentId(attachment, index),
-      filename: attachment.filename,
-      contentType: attachment.contentType,
-      size: attachment.size,
-      disposition: attachment.contentDisposition,
-      cid: attachment.cid,
-      checksum: attachment.checksum,
-      isInline: attachment.contentDisposition === "inline",
-    }));
+    return (parsed?.attachments ?? []).map((attachment, index) => {
+      const classification = classifyAttachment({
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        disposition: attachment.contentDisposition,
+        cid: attachment.cid,
+      });
+
+      return {
+        id: createParsedAttachmentId(attachment, index),
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        size: attachment.size,
+        disposition: attachment.contentDisposition,
+        cid: attachment.cid,
+        checksum: attachment.checksum,
+        isInline: attachment.contentDisposition === "inline",
+        kind: classification.kind,
+        isCalendarInvite: classification.isCalendarInvite,
+        isSignature: classification.isSignature,
+      };
+    });
   }
 
   private mapHeaders(parsed?: ParsedMail): Record<string, string | string[]> {
@@ -1257,6 +1353,12 @@ export class SimpleIMAPService {
       cid: attachment.cid,
       checksum: attachment.checksum,
       isInline: attachment.contentDisposition === "inline",
+      ...classifyAttachment({
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        disposition: attachment.contentDisposition,
+        cid: attachment.cid,
+      }),
       content: attachment.content,
     }));
 
