@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
+RUN npm install -g mcp-proxy
 
 COPY dist ./dist
 COPY README.md CLAUDE-DESKTOP-PACKAGING.md FINAL-VALIDATION.md LICENSE ./
@@ -23,4 +24,4 @@ ENV PROTONMAIL_READ_ONLY=true
 ENV PROTONMAIL_ALLOW_SEND=false
 ENV PROTONMAIL_ALLOW_REMOTE_DRAFT_SYNC=false
 
-CMD ["node", "dist/index.js"]
+CMD ["mcp-proxy", "--", "node", "dist/index.js"]
