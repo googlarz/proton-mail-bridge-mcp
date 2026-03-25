@@ -8,20 +8,10 @@ RUN npm install -g mcp-proxy
 
 COPY dist ./dist
 COPY README.md CLAUDE-DESKTOP-PACKAGING.md FINAL-VALIDATION.md LICENSE ./
+COPY docker/start-inspectable.sh /usr/local/bin/start-inspectable.sh
 
-ENV PROTONMAIL_USERNAME=glama-inspect@example.com
-ENV PROTONMAIL_PASSWORD=glama-inspect-password
-ENV PROTONMAIL_IMAP_HOST=127.0.0.1
-ENV PROTONMAIL_IMAP_PORT=1143
-ENV PROTONMAIL_IMAP_SECURE=false
-ENV PROTONMAIL_SMTP_HOST=127.0.0.1
-ENV PROTONMAIL_SMTP_PORT=1025
-ENV PROTONMAIL_DATA_DIR=/tmp/proton-mail-bridge-mcp
-ENV PROTONMAIL_AUTO_SYNC=false
-ENV PROTONMAIL_STARTUP_SYNC=false
-ENV PROTONMAIL_IDLE_WATCH=false
-ENV PROTONMAIL_READ_ONLY=true
-ENV PROTONMAIL_ALLOW_SEND=false
-ENV PROTONMAIL_ALLOW_REMOTE_DRAFT_SYNC=false
+RUN chmod +x /usr/local/bin/start-inspectable.sh
 
-CMD ["mcp-proxy", "--", "node", "dist/index.js"]
+EXPOSE 8080
+
+CMD ["start-inspectable.sh"]

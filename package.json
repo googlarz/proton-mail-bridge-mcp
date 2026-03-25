@@ -1,11 +1,11 @@
 {
-  "name": "@sirency/protonmail-pro-mcp",
-  "version": "1.2.1",
+  "name": "proton-mail-bridge-mcp",
+  "version": "1.3.0",
   "description": "🌉 Proton Mail Bridge MCP - Professional Proton Mail management with 20+ tools, advanced analytics, and seamless Proton Bridge integration.",
   "type": "module",
+  "packageManager": "npm@10.9.3",
   "main": "dist/index.js",
   "bin": {
-    "protonmail-pro-mcp": "dist/index.js",
     "proton-mail-bridge-mcp": "dist/index.js"
   },
   "scripts": {
@@ -27,7 +27,6 @@
     "protonmail",
     "mcp",
     "email",
-    "sirency",
     "automation",
     "typescript",
     "claude",
@@ -40,9 +39,8 @@
     "professional"
   ],
   "author": {
-    "name": "The Sirency Collective",
-    "email": "contact@sirency.com",
-    "url": "https://sirency.com"
+    "name": "googlarz",
+    "url": "https://github.com/googlarz"
   },
   "license": "MIT",
   "homepage": "https://github.com/googlarz/proton-mail-bridge-mcp#readme",
