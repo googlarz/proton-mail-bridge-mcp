@@ -1911,7 +1911,7 @@ export function createServer(
   const server = new Server(
     {
       name: "proton-mail-bridge-mcp",
-      version: "1.2.0",
+      version: "1.2.1",
     },
     {
       capabilities: {

@@ -252,6 +252,18 @@ If you can see it there, Claude Desktop can see this MCP server.
 
 That means it is available for normal Claude Desktop use on this computer, not just inside the repo folder where you ran setup.
 
+If you want a quick terminal-side check later, run:
+
+```bash
+npm run check:claude-desktop
+```
+
+That command tells you:
+
+- whether Claude Desktop has a `proton-mail-bridge` entry
+- which runtime directory Claude Desktop is using
+- whether the runtime files and dependencies are present
+
 ### What `npm run install:claude-desktop` Is For
 
 `npm run install:claude-desktop` is for Claude Desktop.

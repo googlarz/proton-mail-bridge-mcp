@@ -1,6 +1,6 @@
 {
   "name": "@sirency/protonmail-pro-mcp",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "🌉 Proton Mail Bridge MCP - Professional Proton Mail management with 20+ tools, advanced analytics, and seamless Proton Bridge integration.",
   "type": "module",
   "main": "dist/index.js",
@@ -14,6 +14,7 @@
     "start": "node dist/index.js",
     "install:claude-desktop": "npm run build && node dist/scripts/install-claude-desktop.js",
     "setup:claude-desktop": "npm run build && node dist/scripts/setup-claude-desktop.js",
+    "check:claude-desktop": "npm run build && node dist/scripts/check-claude-desktop.js",
     "test:unit": "npm run build && node --test test/*.test.mjs",
     "test": "npm run build && node --input-type=module -e \"import('./dist/index.js')\" && node --test test/*.test.mjs",
     "smoke:bridge": "npm run build && node dist/scripts/bridge-smoke.js",

@@ -3,7 +3,7 @@
 **Audit date:** 2026-03-24  
 **Repository:** `googlarz/proton-mail-bridge-mcp`  
 **Product:** `Proton Mail Bridge MCP`  
-**Version:** 1.2.0
+**Version:** 1.2.1
 
 ## Summary
 
@@ -13,7 +13,7 @@ The repository previously claimed a fully implemented MCP server, but the commit
 - six imported modules were missing from git
 - there was no `CallTool` handler, only tool metadata
 
-That gap has now been closed with a working TypeScript implementation. The `v1.2` layer adds a stable machine-wide Claude Desktop runtime install, clearer general-use Desktop onboarding, and a concrete MCP Bundle packaging track on top of the prior runtime and sync hardening work:
+That gap has now been closed with a working TypeScript implementation. The `v1.2.1` layer adds a direct Claude Desktop install checker, alongside the stable machine-wide Claude Desktop runtime install and clearer general-use Desktop onboarding from the prior pass:
 
 - SQLite-backed mailbox indexing instead of JSON-only metadata persistence
 - incremental sync checkpoints per folder with persisted sync state
