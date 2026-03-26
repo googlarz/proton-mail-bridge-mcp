@@ -1,4 +1,4 @@
-# Proton Mail Bridge MCP
+# Proton Mail Bridge MCP and CLI
 
 🌉 Proton Mail Bridge MCP gives Proton Mail a serious local MCP and CLI workflow through Proton Bridge.
 
