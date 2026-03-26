@@ -5,6 +5,10 @@
   "type": "module",
   "packageManager": "npm@10.9.3",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json"
+  },
   "bin": {
     "proton-mail-bridge-mcp": "dist/index.js"
   },
@@ -24,7 +28,9 @@
     "prepare": "npm run build",
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "ci": "npm run lint && npm test"
+    "ci": "npm run lint && npm test",
+    "pack:check": "npm pack --dry-run",
+    "release:check": "npm run lint && npm test && npm run pack:check"
   },
   "keywords": [
     "protonmail",
@@ -72,11 +78,13 @@
   },
   "files": [
     "dist/**/*",
+    "Dockerfile",
+    ".dockerignore",
+    "docker/**/*",
     "README.md",
     "CLAUDE-DESKTOP-PACKAGING.md",
     "FINAL-VALIDATION.md",
     "LICENSE",
-    "glama.json",
     "package.json"
   ],
   "publishConfig": {

@@ -2,7 +2,7 @@
 
 🌉 Proton Mail Bridge MCP - Professional Proton Mail management with 20+ tools, advanced analytics, and seamless Proton Bridge integration.
 
-If you use Claude Desktop and Proton Mail, this project gives Claude a practical way to work with your Proton mailbox through Proton Bridge.
+If you use Claude Desktop and Proton Mail, this project gives Claude a practical local way to read, search, draft, send, and organize your Proton mailbox through Proton Bridge.
 
 After setup, Claude Desktop uses a stable local install of this MCP on your computer. It is not limited to one repo, one workspace, or one chat folder.
 
@@ -25,6 +25,7 @@ What it is good at:
 - Read plus write operations: drafts, send, reply, forward, archive, trash, restore.
 - Attachment content access and file saving.
 - Local indexing, thread triage, follow-up views, and background refresh.
+- Local-first Claude Desktop setup that becomes machine-wide after install.
 
 What to expect:
 
@@ -140,6 +141,8 @@ git clone https://github.com/googlarz/proton-mail-bridge-mcp.git
 cd proton-mail-bridge-mcp
 npm install
 ```
+
+If you prefer, you can also download the source from the latest GitHub release instead of cloning the repo.
 
 If `npm` does not exist on your machine, install Node.js 18+ first, then run the commands again.
 
@@ -361,6 +364,7 @@ Important:
 - keep Proton Bridge open when using Claude Desktop
 - if your Bridge password or ports change later, run the installer again
 - this flow is for the local MCP setup, not the remote URL connector screen
+- if you update this repo later, run `npm run update:claude-desktop` to refresh Claude Desktop's installed runtime
 
 ### Manual Claude Desktop Config
 
@@ -521,6 +525,7 @@ Current repository verification includes:
 
 - `npm run build`
 - `npm test`
+- `npm run pack:check`
 - `npm audit --omit=dev`
 - live Proton Bridge SMTP verification
 - live Proton Bridge IMAP verification
@@ -529,6 +534,14 @@ Current repository verification includes:
 - live remote draft sync verification
 - live IDLE probe verification
 - live disposable-message mutation coverage against appended `INBOX` fixtures
+
+For release-quality verification in one command:
+
+```bash
+npm run release:check
+```
+
+That runs linting, tests, and an `npm pack --dry-run` check so the published package contents stay sane.
 
 Still not fully validated:
 
