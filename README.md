@@ -1,17 +1,41 @@
 # Proton Mail Bridge MCP
 
-🌉 Proton Mail Bridge MCP - Professional Proton Mail management with 20+ tools, advanced analytics, and seamless Proton Bridge integration.
+🌉 Proton Mail Bridge MCP gives Proton Mail a serious local MCP and CLI workflow through Proton Bridge.
 
-If you use Claude Desktop and Proton Mail, this project gives Claude a practical local way to read, search, draft, send, and organize your Proton mailbox through Proton Bridge.
+If you use Claude Desktop and Proton Mail, this project gives Claude a practical local way to read, search, draft, send, and organize your Proton mailbox through Proton Bridge. It also gives you a real terminal CLI for direct mail operations, diagnostics, and full MCP tool execution.
 
 After setup, Claude Desktop uses a stable local install of this MCP on your computer. It is not limited to one repo, one workspace, or one chat folder.
 
-The easiest way to think about setup is:
+The easiest way to think about it is:
 
 1. install `Proton Mail Bridge MCP` on your computer
 2. connect it to Claude Desktop
 
-You do not need to understand MCP internals to use it. If Proton Bridge is already working on your machine, the normal Claude Desktop setup is only a few steps.
+You do not need to understand MCP internals to use it. If Proton Bridge is already working on your machine, setup is straightforward.
+
+## Quick Start
+
+If Proton Bridge is already working on your machine:
+
+```bash
+git clone https://github.com/googlarz/proton-mail-bridge-mcp.git
+cd proton-mail-bridge-mcp
+npm install
+npm run setup:claude-desktop
+```
+
+Then:
+
+1. keep Proton Bridge open
+2. restart Claude Desktop
+3. open any chat and check `+` -> `Connectors` -> `proton-mail-bridge`
+
+If you want a fast terminal-side health check too:
+
+```bash
+npm run check:claude-desktop
+proton-mail-bridge doctor --json
+```
 
 ## Why This Exists
 
@@ -229,7 +253,7 @@ That means the supported Claude Desktop path in the current release is:
 
 ## 🖥️ CLI
 
-You can now use Proton Mail Bridge MCP directly from Terminal too.
+You can also use Proton Mail Bridge MCP directly from Terminal.
 
 This is useful when you want to:
 
@@ -237,6 +261,7 @@ This is useful when you want to:
 - run quick searches or reads with fewer steps
 - script sync and diagnostics
 - verify that the local mail stack works before asking Claude to use it
+- call the full MCP tool surface directly from Terminal
 
 The CLI binary is:
 
@@ -285,6 +310,11 @@ proton-mail-bridge tools
 proton-mail-bridge tool <tool-name> --args '{"key":"value"}'
 proton-mail-bridge tool <tool-name> --args-file ./input.json
 ```
+
+That gives you two ways to use the same system:
+
+- Claude Desktop uses it as an MCP server
+- Terminal uses it as a CLI, including generic MCP tool calls
 
 ### Zero-Manual-Config Path For Bridge Users
 
