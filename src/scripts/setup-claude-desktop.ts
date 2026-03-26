@@ -160,7 +160,7 @@ function portFromEnv(rawValue: string | undefined, fallback: number): number {
   }
 }
 
-async function main(): Promise<void> {
+export async function runClaudeDesktopSetupWizard(): Promise<void> {
   if (!input.isTTY || !output.isTTY) {
     throw new Error(
       "setup:claude-desktop needs an interactive terminal. Use npm run install:claude-desktop for a non-interactive install.",
@@ -257,7 +257,7 @@ const isDirectExecution =
   process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isDirectExecution) {
-  main().catch((error) => {
+  runClaudeDesktopSetupWizard().catch((error) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
   });

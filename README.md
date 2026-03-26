@@ -26,6 +26,7 @@ What it is good at:
 - Attachment content access and file saving.
 - Local indexing, thread triage, follow-up views, and background refresh.
 - Local-first Claude Desktop setup that becomes machine-wide after install.
+- A real CLI for sync, search, read, doctor, Claude Desktop maintenance, and full MCP tool execution from Terminal.
 
 What to expect:
 
@@ -225,6 +226,65 @@ That means the supported Claude Desktop path in the current release is:
 - `npm run update:claude-desktop` to refresh the installed Claude Desktop runtime after updating this repo
 - `npm run doctor:claude-desktop` to confirm Claude Desktop still points at a valid Proton Mail Bridge MCP runtime
 - the `.mcpb` local extension track documented in [CLAUDE-DESKTOP-PACKAGING.md](./CLAUDE-DESKTOP-PACKAGING.md)
+
+## 🖥️ CLI
+
+You can now use Proton Mail Bridge MCP directly from Terminal too.
+
+This is useful when you want to:
+
+- test Proton Bridge without opening Claude Desktop
+- run quick searches or reads with fewer steps
+- script sync and diagnostics
+- verify that the local mail stack works before asking Claude to use it
+
+The CLI binary is:
+
+```bash
+proton-mail-bridge
+```
+
+Or, from the repo:
+
+```bash
+npm run cli -- help
+```
+
+Main commands:
+
+- `proton-mail-bridge status`
+- `proton-mail-bridge doctor`
+- `proton-mail-bridge sync --folder INBOX --limit 150`
+- `proton-mail-bridge search "label:inbox invoice"`
+- `proton-mail-bridge search --live --from openai.com`
+- `proton-mail-bridge read INBOX::25642`
+- `proton-mail-bridge tools`
+- `proton-mail-bridge tool get_connection_status`
+- `proton-mail-bridge tool search_indexed_emails --args '{"query":"invoice","limit":3}'`
+- `proton-mail-bridge claude check`
+- `proton-mail-bridge claude install`
+
+Most commands also support `--json` for machine-readable output.
+
+Examples:
+
+```bash
+proton-mail-bridge doctor --json
+proton-mail-bridge sync --folder INBOX --limit 100 --json
+proton-mail-bridge search "domain:openai.com" --limit 10
+proton-mail-bridge read INBOX::25642
+proton-mail-bridge tools
+proton-mail-bridge tool get_connection_status
+proton-mail-bridge claude check --json
+```
+
+If you want the CLI to reach everything the MCP server exposes, use:
+
+```bash
+proton-mail-bridge tools
+proton-mail-bridge tool <tool-name> --args '{"key":"value"}'
+proton-mail-bridge tool <tool-name> --args-file ./input.json
+```
 
 ### Zero-Manual-Config Path For Bridge Users
 
@@ -443,6 +503,20 @@ What this project does better:
 - `reply_to_email`
 - `forward_email`
 
+### CLI
+
+- `proton-mail-bridge status`
+- `proton-mail-bridge doctor`
+- `proton-mail-bridge sync`
+- `proton-mail-bridge search`
+- `proton-mail-bridge read`
+- `proton-mail-bridge tools`
+- `proton-mail-bridge tool`
+- `proton-mail-bridge claude setup`
+- `proton-mail-bridge claude install`
+- `proton-mail-bridge claude check`
+- `proton-mail-bridge claude update`
+
 ### Drafts
 
 - `create_draft`
@@ -526,6 +600,7 @@ Current repository verification includes:
 - `npm run build`
 - `npm test`
 - `npm run pack:check`
+- live CLI verification for `doctor`, `sync`, `search`, and `read`
 - `npm audit --omit=dev`
 - live Proton Bridge SMTP verification
 - live Proton Bridge IMAP verification

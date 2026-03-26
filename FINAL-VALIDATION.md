@@ -3,7 +3,7 @@
 **Audit date:** 2026-03-24  
 **Repository:** `googlarz/proton-mail-bridge-mcp`  
 **Product:** `Proton Mail Bridge MCP`  
-**Version:** 1.4.0
+**Version:** 1.6.0
 
 ## Summary
 
@@ -13,7 +13,7 @@ The repository previously claimed a fully implemented MCP server, but the commit
 - six imported modules were missing from git
 - there was no `CallTool` handler, only tool metadata
 
-That gap has now been closed with a working TypeScript implementation. The `v1.4.0` layer builds on the earlier cleanup and install work with deeper mail-quality upgrades:
+That gap has now been closed with a working TypeScript implementation. The `v1.6.0` layer builds on the earlier cleanup and install work with deeper mail-quality upgrades plus a new first-class CLI that can also execute the full MCP tool surface from Terminal:
 
 - SQLite-backed mailbox indexing instead of JSON-only metadata persistence
 - incremental sync checkpoints per folder with persisted sync state

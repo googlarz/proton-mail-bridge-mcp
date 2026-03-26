@@ -1,6 +1,6 @@
 {
   "name": "proton-mail-bridge-mcp",
-  "version": "1.4.0",
+  "version": "1.6.0",
   "description": "🌉 Proton Mail Bridge MCP - Professional Proton Mail management with 20+ tools, advanced analytics, and seamless Proton Bridge integration.",
   "type": "module",
   "packageManager": "npm@10.9.3",
@@ -10,12 +10,14 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "proton-mail-bridge-mcp": "dist/index.js"
+    "proton-mail-bridge-mcp": "dist/index.js",
+    "proton-mail-bridge": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
+    "cli": "npm run build && node dist/cli.js",
     "install:claude-desktop": "npm run build && node dist/scripts/install-claude-desktop.js",
     "update:claude-desktop": "npm run install:claude-desktop",
     "setup:claude-desktop": "npm run build && node dist/scripts/setup-claude-desktop.js",
