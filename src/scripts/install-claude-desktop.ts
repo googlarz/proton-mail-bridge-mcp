@@ -185,6 +185,20 @@ function getNpmExecutable(): string {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
+async function installRuntimeDependencies(runtimeDir: string): Promise<void> {
+  await execFileAsync(getNpmExecutable(), ["ci", "--omit=dev", "--ignore-scripts"], {
+    cwd: runtimeDir,
+    env: process.env,
+  });
+
+  // better-sqlite3 is native; rebuild it in the staged runtime so Claude Desktop
+  // gets the correct binary for the current machine instead of whatever was built elsewhere.
+  await execFileAsync(getNpmExecutable(), ["rebuild", "better-sqlite3"], {
+    cwd: runtimeDir,
+    env: process.env,
+  });
+}
+
 export async function prepareClaudeDesktopRuntime(options: InstallOptions = {}): Promise<{
   runtimeDir: string;
   sourceCwd: string;
@@ -206,11 +220,7 @@ export async function prepareClaudeDesktopRuntime(options: InstallOptions = {}):
   await cp(join(sourceCwd, "dist"), join(runtimeDir, "dist"), { recursive: true, force: true });
   await copyFile(join(sourceCwd, "package.json"), join(runtimeDir, "package.json"));
   await copyFile(join(sourceCwd, "package-lock.json"), join(runtimeDir, "package-lock.json"));
-
-  await execFileAsync(getNpmExecutable(), ["ci", "--omit=dev", "--ignore-scripts"], {
-    cwd: runtimeDir,
-    env: process.env,
-  });
+  await installRuntimeDependencies(runtimeDir);
 
   return {
     runtimeDir,

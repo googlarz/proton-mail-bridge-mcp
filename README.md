@@ -37,6 +37,10 @@ npm run check:claude-desktop
 proton-mail-bridge doctor --json
 ```
 
+Use the `npm run ...` commands shown in this README.
+
+That matters because the setup and installer entrypoints live in the built `dist/` output, and the npm scripts already point to the right files for you.
+
 ## Why People Use It
 
 - Catch up on Proton Mail from Claude Desktop without switching tools.
@@ -397,6 +401,20 @@ That command tells you:
 - whether Claude Desktop has a `proton-mail-bridge` entry
 - which runtime directory Claude Desktop is using
 - whether the runtime files and dependencies are present
+
+### Mac Note
+
+On macOS, the Claude Desktop runtime needs a macOS-native `better-sqlite3` binary.
+
+The current installer now rebuilds that native module inside the staged Claude Desktop runtime, which avoids the common mismatch where a Linux-built binary gets copied into a Mac setup.
+
+If you ever update machines, restore from another environment, or see a native-module crash later, the normal fix is simply:
+
+```bash
+npm run update:claude-desktop
+```
+
+That refreshes the staged Claude Desktop runtime and rebuilds the native SQLite module for the current machine.
 
 ### What `npm run install:claude-desktop` Is For
 
