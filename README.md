@@ -1,19 +1,19 @@
 # Proton Mail Bridge MCP and CLI
 
-🌉 Proton Mail Bridge MCP gives Proton Mail a serious local MCP and CLI workflow through Proton Bridge.
+Proton Mail for Claude Desktop, done properly.
 
-If you use Claude Desktop and Proton Mail, this project gives Claude a practical local way to read, search, draft, send, and organize your Proton mailbox through Proton Bridge. It also gives you a real terminal CLI for direct mail operations, diagnostics, and full MCP tool execution.
+🌉 Proton Mail Bridge MCP is a local-first Proton Mail integration for Claude Desktop and Terminal. It lets you read, search, draft, send, sync, and manage Proton Mail through Proton Bridge, with both a full MCP server and a real CLI.
 
 After setup, Claude Desktop uses a stable local install of this MCP on your computer. It is not limited to one repo, one workspace, or one chat folder.
 
-The easiest way to think about it is:
+A simple way to think about it:
 
 1. install `Proton Mail Bridge MCP` on your computer
 2. connect it to Claude Desktop
 
 You do not need to understand MCP internals to use it. If Proton Bridge is already working on your machine, setup is straightforward.
 
-## Quick Start
+## 60-Second Setup
 
 If Proton Bridge is already working on your machine:
 
@@ -37,6 +37,14 @@ npm run check:claude-desktop
 proton-mail-bridge doctor --json
 ```
 
+## Why People Use It
+
+- Catch up on Proton Mail from Claude Desktop without switching tools.
+- Search invoices, travel emails, documents, and threads faster.
+- Draft, reply, forward, and send through Proton Bridge.
+- Use the same backend from Claude Desktop or straight from Terminal.
+- Diagnose Claude Desktop and Proton Bridge setup issues quickly.
+
 ## Why This Exists
 
 Claude has a native Gmail connector, but there is no native Proton Mail connector today. This project closes that gap for Proton users.
@@ -58,6 +66,28 @@ What to expect:
 - It plugs into Claude Desktop, but it is not a first-party Claude connector.
 - Source links come from the MCP layer, not native Proton webmail links.
 - Once installed, Claude Desktop can use it across your chats on that computer.
+
+## Trust And Safety
+
+- Runs locally on your machine.
+- Talks to Proton Mail through Proton Bridge on your machine.
+- Does not require a hosted mail relay or remote URL service.
+- Can run in read-only mode if you want safer defaults.
+- Supports `*_FILE` and `*_COMMAND` secrets if you do not want raw credentials in config.
+- Only performs send or mailbox mutations when you explicitly use those capabilities.
+
+## Verified Capabilities
+
+These paths have been live-tested against a real Proton Bridge setup:
+
+- IMAP connection and folder listing
+- SMTP connection and send
+- full message read
+- local indexing and incremental sync
+- thread views, digest, and follow-up workflows
+- remote draft sync to Proton Drafts
+- attachment listing and save
+- CLI commands plus generic MCP tool calls
 
 ## What It Does
 
@@ -291,15 +321,24 @@ Main commands:
 
 Most commands also support `--json` for machine-readable output.
 
-Examples:
+Practical examples:
 
 ```bash
+# Check whether Proton Bridge and Claude-side wiring are healthy
 proton-mail-bridge doctor --json
-proton-mail-bridge sync --folder INBOX --limit 100 --json
-proton-mail-bridge search "domain:openai.com" --limit 10
+
+# Search indexed mail
+proton-mail-bridge search "label:inbox invoice" --limit 10
+
+# Read one message
 proton-mail-bridge read INBOX::25642
+
+# Call any MCP tool directly from Terminal
 proton-mail-bridge tools
-proton-mail-bridge tool get_connection_status
+proton-mail-bridge tool get_connection_status --json
+proton-mail-bridge tool search_indexed_emails --args '{"query":"invoice","limit":3}'
+
+# Check Claude Desktop integration
 proton-mail-bridge claude check --json
 ```
 
@@ -491,6 +530,12 @@ If you prefer to edit the config yourself, add an entry like this to Claude Desk
 - If something still does not work, run `npm run smoke:bridge` in Terminal first. If that fails, Claude Desktop will fail too.
 
 ## Compared With Claude's Native Gmail Connector
+
+Short version:
+
+- Gmail still wins on native Claude polish and first-party integration.
+- Proton Mail Bridge MCP wins on Proton support and direct mail actions.
+- The tradeoff is that this project is local-first and depends on Proton Bridge.
 
 As of March 24, 2026, the practical comparison looks like this:
 
