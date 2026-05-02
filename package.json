@@ -1,6 +1,6 @@
 {
   "name": "proton-mail-bridge-mcp",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "description": "🌉 Proton Mail Bridge MCP - Professional Proton Mail management with 20+ tools, advanced analytics, and seamless Proton Bridge integration.",
   "type": "module",
   "packageManager": "npm@10.9.3",
