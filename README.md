@@ -1,3 +1,12 @@
+```
+  ____  ____   ___ _____ ___  _   _   __  __    _    ___ _
+ |  _ \|  _ \ / _ \_   _/ _ \| \ | | |  \/  |  / \  |_ _| |
+ | |_) | |_) | | | || || | | |  \| | | |\/| | / _ \  | || |
+ |  __/|  _ <| |_| || || |_| | |\  | | |  | |/ ___ \ | || |___
+ |_|   |_| \_\\___/ |_| \___/|_| \_| |_|  |_/_/   \_\___|_____|
+  Bridge MCP  ·  Claude-native email automation
+```
+
 # Proton Mail Bridge MCP and CLI
 
 Proton Mail for Claude Desktop, done properly.
