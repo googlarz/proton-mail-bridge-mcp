@@ -67,7 +67,7 @@ function printHelp(): void {
       " | |_) | |_) | | | || || | | |  \\| | | |\\/| | / _ \\  | || |    ",
       " |  __/|  _ <| |_| || || |_| | |\\  | | |  | |/ ___ \\ | || |___",
       " |_|   |_| \\_\\\\___/ |_| \\___/|_| \\_| |_|  |_/_/   \\_\\___|_____|",
-      "  Bridge MCP  ·  Claude-native email automation",
+      "  Bridge Client  ·  CLI + Claude Desktop MCP for Proton Mail",
       "",
       "Usage:",
       "  proton-mail-bridge <command> [options]",
