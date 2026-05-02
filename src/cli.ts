@@ -5,8 +5,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { buildConfigFromEnv, createServer } from "./index.js";
-import type { EmailSummary, ProtonMailConfig, SearchEmailsInput } from "./types/index.js";
-import { sanitizeRuntimeConfig } from "./utils/runtime-policy.js";
+import type { EmailAddress, EmailDetail, EmailSummary, ProtonMailConfig, SearchEmailsInput } from "./types/index.js";
+import { ensureMailboxWriteAllowed, ensureSendAllowed, sanitizeRuntimeConfig } from "./utils/runtime-policy.js";
+import { isValidEmail, lowerCaseAddress, parseEmails, ensureValidEmails } from "./utils/helpers.js";
 import { getClaudeDesktopInstallStatus } from "./scripts/check-claude-desktop.js";
 import { installClaudeDesktopConfig } from "./scripts/install-claude-desktop.js";
 import { runClaudeDesktopSetupWizard } from "./scripts/setup-claude-desktop.js";
@@ -79,14 +80,30 @@ function printHelp(): void {
       "  sync                   Refresh the local index from Proton Bridge",
       "  index-status           Show local index health and freshness",
       "  folders                List available folders from Proton Bridge",
+      "  create-folder <path>   Create a mailbox folder (e.g. Folders/Receipts)",
+      "  rename-folder <p> <p2> Rename a folder (or use --to <newPath>)",
+      "  delete-folder <path>   Delete an empty folder",
       "  labels                 List normalized labels from the local index",
       "  threads [query]        List normalized threads from the local index",
       "  digest                 Show inbox digest and top actionable threads",
       "  followups              Show follow-up candidates from the local index",
       "  drafts                 List local drafts",
+      "  draft-create           Create a draft (--to --subject --body or stdin)",
+      "  draft-send <id>        Send a saved draft",
+      "  draft-delete <id>      Delete a saved draft",
       "  attachments <emailId>  List attachments for one message",
       "  search [query]         Search indexed mail (default) or live mail with --live",
       "  read <emailId>         Read one email by composite email id",
+      "  move <emailId> <fldr>  Move an email to another folder",
+      "  archive <emailId>      Archive an email",
+      "  trash <emailId>        Move an email to Trash",
+      "  restore <emailId>      Restore an email from Trash to Inbox",
+      "  mark-read <emailId>    Mark read (--unread to flip)",
+      "  star <emailId>         Star an email (--unstar to flip)",
+      "  delete <emailId>       Permanently delete an email",
+      "  send                   Send an email (--to --subject --body or stdin)",
+      "  reply <emailId>        Reply to an email (--body or stdin, --reply-all)",
+      "  forward <emailId>      Forward an email (--to, optional --body or stdin)",
       "  tools                  List every MCP tool exposed by the server",
       "  tool <name>            Call any MCP tool with JSON arguments",
       "  claude setup           Run the interactive Claude Desktop setup wizard",
@@ -711,6 +728,334 @@ async function runRead(parsed: ParsedCliArgs): Promise<void> {
   });
 }
 
+// ── reply/forward helpers (mirrors logic in index.ts) ──────────────────────
+
+function uniqueAddresses(addresses: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const address of addresses) {
+    const normalized = lowerCaseAddress(address);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(address.trim());
+  }
+  return result;
+}
+
+function addressValues(addresses: EmailAddress[]): string[] {
+  return uniqueAddresses(
+    addresses.map((a) => a.address?.trim()).filter((a): a is string => Boolean(a)),
+  );
+}
+
+function prefixedSubject(subject: string, prefix: "Re:" | "Fwd:"): string {
+  const trimmed = subject.trim();
+  return trimmed.toLowerCase().startsWith(prefix.toLowerCase()) ? trimmed : `${prefix} ${trimmed}`;
+}
+
+function formatAddressList(addresses: EmailAddress[]): string {
+  return addresses
+    .map((a) => (a.name && a.address ? `${a.name} <${a.address}>` : a.address || a.name || ""))
+    .filter(Boolean)
+    .join(", ");
+}
+
+function buildReplyText(detail: EmailDetail, body: string): string {
+  const originalText = detail.text || detail.preview || "";
+  const fromText = formatAddressList(detail.from);
+  const dateText = detail.date || detail.internalDate || "an unknown date";
+  return [
+    body.trim(),
+    "",
+    `On ${dateText}, ${fromText || "the sender"} wrote:`,
+    originalText.split(/\r?\n/).map((line) => `> ${line}`).join("\n"),
+  ].join("\n");
+}
+
+function buildForwardText(detail: EmailDetail, body?: string): string {
+  const originalText = detail.text || detail.preview || "";
+  return [
+    body?.trim() || "",
+    "",
+    "---------- Forwarded message ---------",
+    `From: ${formatAddressList(detail.from)}`,
+    `Date: ${detail.date || detail.internalDate || ""}`,
+    `Subject: ${detail.subject}`,
+    `To: ${formatAddressList(detail.to)}`,
+    detail.cc.length > 0 ? `Cc: ${formatAddressList(detail.cc)}` : "",
+    "",
+    originalText,
+  ]
+    .filter((line, index, array) => line !== "" || (index > 0 && array[index - 1] !== ""))
+    .join("\n");
+}
+
+function getReplyRecipients(
+  detail: EmailDetail,
+  ownerEmail: string,
+  replyAll: boolean,
+): { to: string[]; cc: string[] } {
+  const owner = lowerCaseAddress(ownerEmail);
+  const primary = addressValues(detail.replyTo).length > 0 ? detail.replyTo : detail.from;
+  const to = uniqueAddresses(
+    addressValues(primary).filter((address) => lowerCaseAddress(address) !== owner),
+  );
+  if (!replyAll) return { to, cc: [] };
+  const cc = uniqueAddresses([...addressValues(detail.to), ...addressValues(detail.cc)]).filter(
+    (address) => {
+      const normalized = lowerCaseAddress(address);
+      return normalized !== owner && !to.some((r) => lowerCaseAddress(r) === normalized);
+    },
+  );
+  return { to, cc };
+}
+
+// ── write commands ──────────────────────────────────────────────────────────
+
+async function runMove(parsed: ParsedCliArgs): Promise<void> {
+  const emailId = parsed.positionals[0];
+  const targetFolder = parsed.positionals[1] || getStringFlag(parsed.flags, "folder");
+  if (!emailId) throw new Error("move requires an emailId");
+  if (!targetFolder) throw new Error("move requires a target folder as a second argument or --folder");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withServices(async ({ config, imapService }) => {
+    ensureMailboxWriteAllowed(config.runtime);
+    const result = await imapService.moveEmail(emailId, targetFolder);
+    process.stdout.write(wantJson ? json(result) : `Moved ${emailId} → ${result.targetFolder}\n`);
+  });
+}
+
+async function runArchive(parsed: ParsedCliArgs): Promise<void> {
+  const emailId = parsed.positionals[0];
+  if (!emailId) throw new Error("archive requires an emailId");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withServices(async ({ config, imapService }) => {
+    ensureMailboxWriteAllowed(config.runtime);
+    const result = await imapService.archiveEmail(emailId);
+    process.stdout.write(wantJson ? json(result) : `Archived ${emailId} → ${result.targetFolder}\n`);
+  });
+}
+
+async function runTrash(parsed: ParsedCliArgs): Promise<void> {
+  const emailId = parsed.positionals[0];
+  if (!emailId) throw new Error("trash requires an emailId");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withServices(async ({ config, imapService }) => {
+    ensureMailboxWriteAllowed(config.runtime);
+    const result = await imapService.trashEmail(emailId);
+    process.stdout.write(wantJson ? json(result) : `Trashed ${emailId} → ${result.targetFolder}\n`);
+  });
+}
+
+async function runRestore(parsed: ParsedCliArgs): Promise<void> {
+  const emailId = parsed.positionals[0];
+  if (!emailId) throw new Error("restore requires an emailId");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withServices(async ({ config, imapService }) => {
+    ensureMailboxWriteAllowed(config.runtime);
+    const result = await imapService.restoreEmail(emailId, getStringFlag(parsed.flags, "folder"));
+    process.stdout.write(wantJson ? json(result) : `Restored ${emailId} → ${result.targetFolder}\n`);
+  });
+}
+
+async function runMarkRead(parsed: ParsedCliArgs): Promise<void> {
+  const emailId = parsed.positionals[0];
+  if (!emailId) throw new Error("mark-read requires an emailId");
+  const isRead = !isTruthyFlag(parsed.flags.unread);
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withServices(async ({ config, imapService }) => {
+    ensureMailboxWriteAllowed(config.runtime);
+    const result = await imapService.markEmailRead(emailId, isRead);
+    process.stdout.write(wantJson ? json(result) : `Marked ${emailId} as ${result.isRead ? "read" : "unread"}\n`);
+  });
+}
+
+async function runStar(parsed: ParsedCliArgs): Promise<void> {
+  const emailId = parsed.positionals[0];
+  if (!emailId) throw new Error("star requires an emailId");
+  const isStarred = !isTruthyFlag(parsed.flags.unstar);
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withServices(async ({ config, imapService }) => {
+    ensureMailboxWriteAllowed(config.runtime);
+    const result = await imapService.starEmail(emailId, isStarred);
+    process.stdout.write(wantJson ? json(result) : `${result.isStarred ? "Starred" : "Unstarred"} ${emailId}\n`);
+  });
+}
+
+async function runDelete(parsed: ParsedCliArgs): Promise<void> {
+  const emailId = parsed.positionals[0];
+  if (!emailId) throw new Error("delete requires an emailId");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withServices(async ({ config, imapService }) => {
+    ensureMailboxWriteAllowed(config.runtime);
+    const result = await imapService.deleteEmail(emailId);
+    process.stdout.write(wantJson ? json(result) : `Deleted ${emailId}\n`);
+  });
+}
+
+async function runSend(parsed: ParsedCliArgs): Promise<void> {
+  const to = parseEmails(getStringFlag(parsed.flags, "to") || "");
+  const cc = parseEmails(getStringFlag(parsed.flags, "cc") || "");
+  const bcc = parseEmails(getStringFlag(parsed.flags, "bcc") || "");
+  const subject = getStringFlag(parsed.flags, "subject");
+  if (to.length === 0) throw new Error("send requires --to");
+  if (!subject) throw new Error("send requires --subject");
+
+  let body = getStringFlag(parsed.flags, "body");
+  if (!body) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+    body = Buffer.concat(chunks).toString("utf8").trim();
+  }
+  if (!body) throw new Error("send requires --body or body piped via stdin");
+
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withServices(async ({ config, smtpService }) => {
+    ensureSendAllowed(config.runtime);
+    ensureValidEmails(to, "to");
+    ensureValidEmails(cc, "cc");
+    ensureValidEmails(bcc, "bcc");
+    const result = await smtpService.sendEmail({ to, cc, bcc, subject, body: body!, isHtml: isTruthyFlag(parsed.flags.html) });
+    process.stdout.write(wantJson ? json(result) : `Sent. messageId=${result.messageId ?? "unknown"} accepted=${result.accepted.join(",")}\n`);
+  });
+}
+
+async function runReply(parsed: ParsedCliArgs): Promise<void> {
+  const emailId = parsed.positionals[0];
+  if (!emailId) throw new Error("reply requires an emailId");
+  const replyAll = isTruthyFlag(parsed.flags["reply-all"]) || isTruthyFlag(parsed.flags.all);
+
+  let body = getStringFlag(parsed.flags, "body");
+  if (!body) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+    body = Buffer.concat(chunks).toString("utf8").trim();
+  }
+  if (!body) throw new Error("reply requires --body or body piped via stdin");
+
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withServices(async ({ config, smtpService, imapService }) => {
+    ensureSendAllowed(config.runtime);
+    const detail = await imapService.getEmailById(emailId);
+    const recipients = getReplyRecipients(detail, config.smtp.username, replyAll);
+    if (recipients.to.length === 0) throw new Error("Unable to infer reply recipient.");
+    const result = await smtpService.sendEmail({
+      to: recipients.to,
+      cc: recipients.cc,
+      subject: prefixedSubject(detail.subject, "Re:"),
+      body: buildReplyText(detail, body!),
+      inReplyTo: detail.messageId,
+      references: detail.messageId ? [detail.messageId] : undefined,
+    });
+    process.stdout.write(wantJson ? json({ repliedTo: emailId, to: recipients.to, messageId: result.messageId }) : `Reply sent to ${recipients.to.join(", ")}\n`);
+  });
+}
+
+async function runForward(parsed: ParsedCliArgs): Promise<void> {
+  const emailId = parsed.positionals[0];
+  if (!emailId) throw new Error("forward requires an emailId");
+  const to = parseEmails(getStringFlag(parsed.flags, "to") || "");
+  if (to.length === 0) throw new Error("forward requires --to");
+
+  let body = getStringFlag(parsed.flags, "body");
+  if (!body) {
+    const stdinChunks: Buffer[] = [];
+    for await (const chunk of process.stdin) stdinChunks.push(Buffer.from(chunk));
+    const stdinText = Buffer.concat(stdinChunks).toString("utf8").trim();
+    if (stdinText) body = stdinText;
+  }
+
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withServices(async ({ config, smtpService, imapService }) => {
+    ensureSendAllowed(config.runtime);
+    ensureValidEmails(to, "to");
+    const detail = await imapService.getEmailById(emailId);
+    const result = await smtpService.sendEmail({
+      to,
+      subject: prefixedSubject(detail.subject, "Fwd:"),
+      body: buildForwardText(detail, body),
+    });
+    process.stdout.write(wantJson ? json({ forwardedMessage: emailId, to, messageId: result.messageId }) : `Forwarded to ${to.join(", ")}\n`);
+  });
+}
+
+async function runCreateFolder(parsed: ParsedCliArgs): Promise<void> {
+  const path = parsed.positionals[0] || getStringFlag(parsed.flags, "path");
+  if (!path) throw new Error("create-folder requires a path argument");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withServices(async ({ config, imapService }) => {
+    ensureMailboxWriteAllowed(config.runtime);
+    const result = await imapService.createFolder(path);
+    process.stdout.write(wantJson ? json(result) : `${result.created ? "Created" : "Already existed"}: ${result.path}\n`);
+  });
+}
+
+async function runRenameFolder(parsed: ParsedCliArgs): Promise<void> {
+  const path = parsed.positionals[0] || getStringFlag(parsed.flags, "path");
+  const newPath = parsed.positionals[1] || getStringFlag(parsed.flags, "to") || getStringFlag(parsed.flags, "new-path");
+  if (!path) throw new Error("rename-folder requires a source path argument");
+  if (!newPath) throw new Error("rename-folder requires a target path as second argument or --to");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withServices(async ({ config, imapService }) => {
+    ensureMailboxWriteAllowed(config.runtime);
+    const result = await imapService.renameFolder(path, newPath);
+    process.stdout.write(wantJson ? json(result) : `Renamed: ${result.path} → ${result.newPath}\n`);
+  });
+}
+
+async function runDeleteFolder(parsed: ParsedCliArgs): Promise<void> {
+  const path = parsed.positionals[0] || getStringFlag(parsed.flags, "path");
+  if (!path) throw new Error("delete-folder requires a path argument");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withServices(async ({ config, imapService }) => {
+    ensureMailboxWriteAllowed(config.runtime);
+    const result = await imapService.deleteFolder(path);
+    process.stdout.write(wantJson ? json(result) : `Deleted folder: ${result.path}\n`);
+  });
+}
+
+// draft commands go through withMcpClient to reuse policy/remote-sync logic in index.ts
+async function runDraftCreate(parsed: ParsedCliArgs): Promise<void> {
+  const to = getStringFlag(parsed.flags, "to") || "";
+  const subject = getStringFlag(parsed.flags, "subject");
+  if (!subject) throw new Error("draft-create requires --subject");
+  let body = getStringFlag(parsed.flags, "body");
+  if (!body) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+    body = Buffer.concat(chunks).toString("utf8").trim();
+  }
+  if (!body) throw new Error("draft-create requires --body or body piped via stdin");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "create_draft",
+      arguments: { to, subject, body, cc: getStringFlag(parsed.flags, "cc") || "", bcc: getStringFlag(parsed.flags, "bcc") || "" },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runDraftSend(parsed: ParsedCliArgs): Promise<void> {
+  const draftId = parsed.positionals[0] || getStringFlag(parsed.flags, "id");
+  if (!draftId) throw new Error("draft-send requires a draft id");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({ name: "send_draft", arguments: { draftId } });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runDraftDelete(parsed: ParsedCliArgs): Promise<void> {
+  const draftId = parsed.positionals[0] || getStringFlag(parsed.flags, "id");
+  if (!draftId) throw new Error("draft-delete requires a draft id");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({ name: "delete_draft", arguments: { draftId } });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
 async function runTools(parsed: ParsedCliArgs): Promise<void> {
   const wantJson = isTruthyFlag(parsed.flags.json);
   await withMcpClient(async (client) => {
@@ -799,6 +1144,15 @@ export async function main(): Promise<void> {
     case "folders":
       await runFolders(parsed);
       return;
+    case "create-folder":
+      await runCreateFolder(parsed);
+      return;
+    case "rename-folder":
+      await runRenameFolder(parsed);
+      return;
+    case "delete-folder":
+      await runDeleteFolder(parsed);
+      return;
     case "labels":
       await runLabels(parsed);
       return;
@@ -822,6 +1176,45 @@ export async function main(): Promise<void> {
       return;
     case "read":
       await runRead(parsed);
+      return;
+    case "move":
+      await runMove(parsed);
+      return;
+    case "archive":
+      await runArchive(parsed);
+      return;
+    case "trash":
+      await runTrash(parsed);
+      return;
+    case "restore":
+      await runRestore(parsed);
+      return;
+    case "mark-read":
+      await runMarkRead(parsed);
+      return;
+    case "star":
+      await runStar(parsed);
+      return;
+    case "delete":
+      await runDelete(parsed);
+      return;
+    case "send":
+      await runSend(parsed);
+      return;
+    case "reply":
+      await runReply(parsed);
+      return;
+    case "forward":
+      await runForward(parsed);
+      return;
+    case "draft-create":
+      await runDraftCreate(parsed);
+      return;
+    case "draft-send":
+      await runDraftSend(parsed);
+      return;
+    case "draft-delete":
+      await runDraftDelete(parsed);
       return;
     case "tools":
       await runTools(parsed);
