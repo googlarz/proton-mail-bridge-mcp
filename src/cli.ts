@@ -61,7 +61,12 @@ function cliEntryPath(): string {
 function printHelp(): void {
   process.stdout.write(
     [
-      "Proton Mail Bridge CLI",
+      "  ____  ____   ___ _____ ___  _   _   __  __    _    ___ _     ",
+      " |  _ \\|  _ \\ / _ \\_   _/ _ \\| \\ | | |  \\/  |  / \\  |_ _| |    ",
+      " | |_) | |_) | | | || || | | |  \\| | | |\\/| | / _ \\  | || |    ",
+      " |  __/|  _ <| |_| || || |_| | |\\  | | |  | |/ ___ \\ | || |___",
+      " |_|   |_| \\_\\\\___/ |_| \\___/|_| \\_| |_|  |_/_/   \\_\\___|_____|",
+      "  Bridge MCP  ·  Claude-native email automation",
       "",
       "Usage:",
       "  proton-mail-bridge <command> [options]",
