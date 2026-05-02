@@ -132,13 +132,13 @@ function renderStatus(status: ClaudeDesktopInstallStatus): string {
     return [
       "Claude Desktop config not found.",
       `Expected config path: ${status.configPath}`,
-      "Run npm run setup:claude-desktop to install Proton Mail Bridge MCP for Claude Desktop.",
+      "Run npm run setup:claude-desktop to install Proton Mail Bridge Client for Claude Desktop.",
     ].join("\n");
   }
 
   if (!status.installed) {
     return [
-      "Proton Mail Bridge MCP is not currently registered in Claude Desktop.",
+      "Proton Mail Bridge Client is not currently registered in Claude Desktop.",
       `Config path: ${status.configPath}`,
       `Expected server key: ${status.serverName}`,
       "Run npm run setup:claude-desktop to add it.",

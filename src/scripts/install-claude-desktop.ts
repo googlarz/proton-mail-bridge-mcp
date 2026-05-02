@@ -141,11 +141,11 @@ export function resolveClaudeDesktopRuntimeDir(explicitPath?: string): string {
 
   switch (process.platform) {
     case "darwin":
-      return join(homedir(), "Library", "Application Support", "Proton Mail Bridge MCP");
+      return join(homedir(), "Library", "Application Support", "Proton Mail Bridge Client");
     case "win32":
-      return join(process.env.APPDATA || join(homedir(), "AppData", "Roaming"), "Proton Mail Bridge MCP");
+      return join(process.env.APPDATA || join(homedir(), "AppData", "Roaming"), "Proton Mail Bridge Client");
     default:
-      return join(homedir(), ".local", "share", "proton-mail-bridge-mcp");
+      return join(homedir(), ".local", "share", "proton-mail-bridge-client");
   }
 }
 

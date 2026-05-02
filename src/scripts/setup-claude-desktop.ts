@@ -13,7 +13,7 @@ const DEFAULT_IMAP_HOST = "127.0.0.1";
 const DEFAULT_IMAP_PORT = 1143;
 const DEFAULT_SMTP_HOST = "127.0.0.1";
 const DEFAULT_SMTP_PORT = 1025;
-const DEFAULT_DATA_DIR = join(homedir(), ".proton-mail-bridge-mcp");
+const DEFAULT_DATA_DIR = join(homedir(), ".proton-mail-bridge-client");
 const DEFAULT_ALLOWED_ACTIONS = "mark_read,mark_unread,star,unstar,archive,trash,restore";
 
 export interface WizardAnswers {
@@ -171,7 +171,7 @@ export async function runClaudeDesktopSetupWizard(): Promise<void> {
   const smtpReachable = await probePort(DEFAULT_SMTP_HOST, DEFAULT_SMTP_PORT);
   const defaultConfigPath = resolveClaudeDesktopConfigPath();
 
-  output.write("Proton Mail Bridge MCP Claude Desktop setup\n\n");
+  output.write("Proton Mail Bridge Client — Claude Desktop setup\n\n");
   output.write(`Claude Desktop config: ${defaultConfigPath}\n`);
 
   if (imapReachable || smtpReachable) {
@@ -185,7 +185,7 @@ export async function runClaudeDesktopSetupWizard(): Promise<void> {
   }
 
   output.write(
-    "This wizard installs Proton Mail Bridge MCP for Claude Desktop on this computer. It stages a stable local runtime for Claude Desktop to use across chats and workspaces. It does not create a remote URL connector.\n\n",
+    "This wizard installs Proton Mail Bridge Client for Claude Desktop on this computer. It stages a stable local runtime for Claude Desktop to use across chats and workspaces. It does not create a remote URL connector.\n\n",
   );
 
   const rl = createInterface({ input, output });

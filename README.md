@@ -157,7 +157,7 @@ export PROTONMAIL_IMAP_PORT='1143'
 export PROTONMAIL_IMAP_SECURE='false'
 export PROTONMAIL_SMTP_HOST='127.0.0.1'
 export PROTONMAIL_SMTP_PORT='1025'
-export PROTONMAIL_DATA_DIR="$HOME/.proton-mail-bridge-mcp"
+export PROTONMAIL_DATA_DIR="$HOME/.proton-mail-bridge-client"
 ```
 
 Optional secrets via file or command (avoids raw credentials in shell):
@@ -204,9 +204,9 @@ After setup: restart Claude Desktop, keep Proton Bridge open, then check `+` →
 
 The runtime is installed at:
 
-- macOS: `~/Library/Application Support/Proton Mail Bridge MCP`
-- Linux: `~/.local/share/proton-mail-bridge-mcp`
-- Windows: `%APPDATA%\Proton Mail Bridge MCP`
+- macOS: `~/Library/Application Support/Proton Mail Bridge Client`
+- Linux: `~/.local/share/proton-mail-bridge-client`
+- Windows: `%APPDATA%\Proton Mail Bridge Client`
 
 ### Updating
 

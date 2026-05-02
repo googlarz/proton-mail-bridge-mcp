@@ -2079,7 +2079,7 @@ export function buildConfigFromEnv(): ProtonMailConfig {
       username,
       password,
     },
-    dataDir: process.env.PROTONMAIL_DATA_DIR || join(homedir(), ".proton-mail-bridge-mcp"),
+    dataDir: process.env.PROTONMAIL_DATA_DIR || join(homedir(), ".proton-mail-bridge-client"),
     debug,
     cacheEnabled: true,
     analyticsEnabled: true,
@@ -2125,8 +2125,8 @@ export function createServer(
 
   const server = new Server(
     {
-      name: "proton-mail-bridge-mcp",
-      version: "1.6.1",
+      name: "proton-mail-bridge-client",
+      version: "1.10.0",
     },
     {
       capabilities: {
