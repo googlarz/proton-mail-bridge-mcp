@@ -32,8 +32,8 @@ Default local Bridge addresses: IMAP `127.0.0.1:1143`, SMTP `127.0.0.1:1025`
 ## Install
 
 ```bash
-git clone https://github.com/googlarz/proton-mail-bridge-mcp.git
-cd proton-mail-bridge-mcp
+git clone https://github.com/googlarz/proton-mail-bridge-client.git
+cd proton-mail-bridge-client
 npm install
 npm run build
 ```

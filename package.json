@@ -55,13 +55,13 @@
     "url": "https://github.com/googlarz"
   },
   "license": "MIT",
-  "homepage": "https://github.com/googlarz/proton-mail-bridge-mcp#readme",
+  "homepage": "https://github.com/googlarz/proton-mail-bridge-client#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/googlarz/proton-mail-bridge-mcp.git"
+    "url": "git+https://github.com/googlarz/proton-mail-bridge-client.git"
   },
   "bugs": {
-    "url": "https://github.com/googlarz/proton-mail-bridge-mcp/issues"
+    "url": "https://github.com/googlarz/proton-mail-bridge-client/issues"
   },
   "engines": {
     "node": ">=18.0.0"
