@@ -418,6 +418,96 @@ export class SimpleIMAPService {
     return { syncedAt, folders };
   }
 
+  async createFolder(path: string): Promise<{
+    path: string;
+    created: boolean;
+    folder?: FolderInfo;
+  }> {
+    const trimmed = path?.trim();
+    if (!trimmed) {
+      throw new Error("Folder path is required.");
+    }
+
+    const client = await this.ensureConnected();
+    const response = await client.mailboxCreate(trimmed);
+
+    this.folderCache = undefined;
+    const folders = await this.getFolders(true);
+    const folder = folders.find((entry) => entry.path === response.path);
+
+    return { path: response.path, created: response.created !== false, folder };
+  }
+
+  async renameFolder(path: string, newPath: string): Promise<{
+    path: string;
+    newPath: string;
+    folder?: FolderInfo;
+  }> {
+    const fromPath = path?.trim();
+    const toPath = newPath?.trim();
+    if (!fromPath) {
+      throw new Error("Source folder path is required.");
+    }
+    if (!toPath) {
+      throw new Error("Target folder path is required.");
+    }
+    if (fromPath === toPath) {
+      throw new Error("Source and target paths are identical.");
+    }
+
+    const client = await this.ensureConnected();
+    const response = await client.mailboxRename(fromPath, toPath);
+
+    this.folderCache = undefined;
+    for (const [id, cached] of this.messageCache) {
+      if (cached.folder === response.path) {
+        this.messageCache.delete(id);
+      }
+    }
+    const folders = await this.getFolders(true);
+    const folder = folders.find((entry) => entry.path === response.newPath);
+
+    return { path: response.path, newPath: response.newPath, folder };
+  }
+
+  async deleteFolder(path: string): Promise<{
+    path: string;
+    deleted: true;
+  }> {
+    const trimmed = path?.trim();
+    if (!trimmed) {
+      throw new Error("Folder path is required.");
+    }
+
+    const reservedRoots = new Set([
+      "INBOX",
+      "Drafts",
+      "Sent",
+      "Trash",
+      "Spam",
+      "Archive",
+      "All Mail",
+      "Folders",
+      "Labels",
+    ]);
+    if (reservedRoots.has(trimmed)) {
+      throw new Error(`Refusing to delete reserved system folder ${trimmed}.`);
+    }
+
+    const client = await this.ensureConnected();
+    const response = await client.mailboxDelete(trimmed);
+
+    this.folderCache = undefined;
+    for (const [id, cached] of this.messageCache) {
+      if (cached.folder === response.path) {
+        this.messageCache.delete(id);
+      }
+    }
+    await this.getFolders(true);
+
+    return { path: response.path, deleted: true };
+  }
+
   async getEmails(input: GetEmailsInput = {}): Promise<{
     folder: string;
     total: number;

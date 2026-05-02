@@ -469,6 +469,46 @@ const TOOLS = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "create_folder",
+    description:
+      "Create a mailbox folder. Use the IMAP path delimiter (usually '/') for nesting, e.g. 'Folders/Receipts'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description:
+            "Full mailbox path. In Proton Bridge, user folders live under 'Folders/' and labels under 'Labels/'.",
+        },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "rename_folder",
+    description: "Rename or move a mailbox folder.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Existing folder path." },
+        newPath: { type: "string", description: "New folder path." },
+      },
+      required: ["path", "newPath"],
+    },
+  },
+  {
+    name: "delete_folder",
+    description:
+      "Delete a mailbox folder. The folder must be empty in Proton Bridge — move or trash messages first.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Folder path to delete." },
+      },
+      required: ["path"],
+    },
+  },
+  {
     name: "mark_email_read",
     description: "Mark an email as read or unread.",
     inputSchema: {
@@ -2865,6 +2905,33 @@ export function createServer(
 
         case "sync_folders":
           return createTextResult(await imapService.syncFolders());
+
+        case "create_folder":
+          ensureMailboxWriteAllowed(config.runtime);
+          return createTextResult(
+            await withAudit(auditService, name, args, async () =>
+              imapService.createFolder(requireString(args, "path")),
+            ),
+          );
+
+        case "rename_folder":
+          ensureMailboxWriteAllowed(config.runtime);
+          return createTextResult(
+            await withAudit(auditService, name, args, async () =>
+              imapService.renameFolder(
+                requireString(args, "path"),
+                requireString(args, "newPath"),
+              ),
+            ),
+          );
+
+        case "delete_folder":
+          ensureMailboxWriteAllowed(config.runtime);
+          return createTextResult(
+            await withAudit(auditService, name, args, async () =>
+              imapService.deleteFolder(requireString(args, "path")),
+            ),
+          );
 
         case "mark_email_read":
           ensureEmailActionAllowed(
