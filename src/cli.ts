@@ -87,10 +87,7 @@ function printHelp(): void {
       "  threads [query]        List normalized threads from the local index",
       "  digest                 Show inbox digest and top actionable threads",
       "  followups              Show follow-up candidates from the local index",
-      "  drafts                 List local drafts",
-      "  draft-create           Create a draft (--to --subject --body or stdin)",
-      "  draft-send <id>        Send a saved draft",
-      "  draft-delete <id>      Delete a saved draft",
+      "  emails                 List emails from a folder (--folder --limit --offset)",
       "  attachments <emailId>  List attachments for one message",
       "  search [query]         Search indexed mail (default) or live mail with --live",
       "  read <emailId>         Read one email by composite email id",
@@ -101,9 +98,33 @@ function printHelp(): void {
       "  mark-read <emailId>    Mark read (--unread to flip)",
       "  star <emailId>         Star an email (--unstar to flip)",
       "  delete <emailId>       Permanently delete an email",
+      "  batch <action> <ids…>  Apply action to multiple emails (or --ids)",
       "  send                   Send an email (--to --subject --body or stdin)",
       "  reply <emailId>        Reply to an email (--body or stdin, --reply-all)",
       "  forward <emailId>      Forward an email (--to, optional --body or stdin)",
+      "  test-email <addr>      Send a test email to verify SMTP",
+      "  thread <id>            Fetch a full thread by id",
+      "  thread-brief <id>      Summarise a thread (latest in/out, next action)",
+      "  thread-action <id> <a> Apply action to all messages in a thread",
+      "  actionable             List actionable threads",
+      "  document-threads       Find threads with important attachments",
+      "  meeting-context <who>  Prep context for a meeting (--domain also accepted)",
+      "  stats                  Mailbox counts and analytics sample",
+      "  analytics              Detailed mailbox analytics (top senders, busy hours)",
+      "  contacts               Contacts ranked by interaction volume",
+      "  volume-trends          Daily message counts (--days, default 30)",
+      "  watch                  Wait for mailbox changes via IMAP IDLE (--timeout)",
+      "  drafts                 List local drafts",
+      "  remote-drafts          List drafts in the Proton Drafts mailbox",
+      "  draft-create           Create a draft (--to --subject --body or stdin)",
+      "  draft-read <id>        Read a saved draft",
+      "  draft-update <id>      Update a draft (--subject --body --to etc.)",
+      "  draft-reply <emailId>  Create a reply draft (--body or stdin, --reply-all)",
+      "  draft-forward <id>     Create a forward draft (--to, --body or stdin)",
+      "  draft-sync <id>        Sync a local draft to the Proton Drafts mailbox",
+      "  draft-send <id>        Send a saved draft",
+      "  draft-delete <id>      Delete a saved draft",
+      "  draft-thread-reply <id> Create a reply draft for a thread",
       "  tools                  List every MCP tool exposed by the server",
       "  tool <name>            Call any MCP tool with JSON arguments",
       "  claude setup           Run the interactive Claude Desktop setup wizard",
@@ -1015,6 +1036,194 @@ async function runDeleteFolder(parsed: ParsedCliArgs): Promise<void> {
 }
 
 // draft commands go through withMcpClient to reuse policy/remote-sync logic in index.ts
+async function runEmails(parsed: ParsedCliArgs): Promise<void> {
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "get_emails",
+      arguments: {
+        folder: getStringFlag(parsed.flags, "folder") || "INBOX",
+        limit: getNumberFlag(parsed.flags, "limit", 50),
+        offset: getNumberFlag(parsed.flags, "offset", 0),
+      },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runThread(parsed: ParsedCliArgs): Promise<void> {
+  const threadId = parsed.positionals[0] || getStringFlag(parsed.flags, "id");
+  if (!threadId) throw new Error("thread requires a threadId");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({ name: "get_thread_by_id", arguments: { threadId } });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runThreadBrief(parsed: ParsedCliArgs): Promise<void> {
+  const threadId = parsed.positionals[0] || getStringFlag(parsed.flags, "id");
+  if (!threadId) throw new Error("thread-brief requires a threadId");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({ name: "get_thread_brief", arguments: { threadId } });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runActionable(parsed: ParsedCliArgs): Promise<void> {
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "get_actionable_threads",
+      arguments: { limit: getNumberFlag(parsed.flags, "limit", 25) },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runDocumentThreads(parsed: ParsedCliArgs): Promise<void> {
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "find_document_threads",
+      arguments: {
+        category: getStringFlag(parsed.flags, "category"),
+        query: parsed.positionals.join(" ") || undefined,
+        limit: getNumberFlag(parsed.flags, "limit", 25),
+        sync: isTruthyFlag(parsed.flags.sync) || undefined,
+      },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runMeetingContext(parsed: ParsedCliArgs): Promise<void> {
+  const person = parsed.positionals[0] || getStringFlag(parsed.flags, "person");
+  const domain = getStringFlag(parsed.flags, "domain");
+  if (!person && !domain) throw new Error("meeting-context requires a person argument or --domain");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "prepare_meeting_context",
+      arguments: {
+        person,
+        domain,
+        limit: getNumberFlag(parsed.flags, "limit", 10),
+        sync: isTruthyFlag(parsed.flags.sync) || undefined,
+      },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runThreadAction(parsed: ParsedCliArgs): Promise<void> {
+  const threadId = parsed.positionals[0] || getStringFlag(parsed.flags, "id");
+  const action = parsed.positionals[1] || getStringFlag(parsed.flags, "action");
+  if (!threadId) throw new Error("thread-action requires a threadId");
+  if (!action) throw new Error("thread-action requires an action (mark_read|mark_unread|star|unstar|archive|trash|restore)");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "apply_thread_action",
+      arguments: {
+        threadId,
+        action,
+        targetFolder: getStringFlag(parsed.flags, "folder"),
+        unreadOnly: isTruthyFlag(parsed.flags["unread-only"]) || undefined,
+        dryRun: isTruthyFlag(parsed.flags["dry-run"]) || undefined,
+      },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runBatch(parsed: ParsedCliArgs): Promise<void> {
+  const action = parsed.positionals[0] || getStringFlag(parsed.flags, "action");
+  const emailIds = parsed.positionals.slice(1).join(",") || getStringFlag(parsed.flags, "ids");
+  if (!action) throw new Error("batch requires an action (mark_read|mark_unread|star|unstar|archive|trash|restore)");
+  if (!emailIds) throw new Error("batch requires email ids as positional args or --ids");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "batch_email_action",
+      arguments: {
+        emailIds,
+        action,
+        targetFolder: getStringFlag(parsed.flags, "folder"),
+        dryRun: isTruthyFlag(parsed.flags["dry-run"]) || undefined,
+      },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runStats(parsed: ParsedCliArgs): Promise<void> {
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({ name: "get_email_stats", arguments: {} });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runAnalytics(parsed: ParsedCliArgs): Promise<void> {
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({ name: "get_email_analytics", arguments: {} });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runContacts(parsed: ParsedCliArgs): Promise<void> {
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "get_contacts",
+      arguments: { limit: getNumberFlag(parsed.flags, "limit", 100) },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runVolumeTrends(parsed: ParsedCliArgs): Promise<void> {
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "get_volume_trends",
+      arguments: { days: getNumberFlag(parsed.flags, "days", 30) },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runWatch(parsed: ParsedCliArgs): Promise<void> {
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "wait_for_mailbox_changes",
+      arguments: {
+        folder: getStringFlag(parsed.flags, "folder") || "INBOX",
+        timeoutSeconds: getNumberFlag(parsed.flags, "timeout", 15),
+      },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runTestEmail(parsed: ParsedCliArgs): Promise<void> {
+  const to = parsed.positionals[0] || getStringFlag(parsed.flags, "to");
+  if (!to) throw new Error("test-email requires a recipient address");
+  if (!isValidEmail(to)) throw new Error("test-email: invalid email address");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "send_test_email",
+      arguments: { to, customMessage: getStringFlag(parsed.flags, "message") },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
 async function runDraftCreate(parsed: ParsedCliArgs): Promise<void> {
   const to = getStringFlag(parsed.flags, "to") || "";
   const subject = getStringFlag(parsed.flags, "subject");
@@ -1031,6 +1240,143 @@ async function runDraftCreate(parsed: ParsedCliArgs): Promise<void> {
     const result = await client.callTool({
       name: "create_draft",
       arguments: { to, subject, body, cc: getStringFlag(parsed.flags, "cc") || "", bcc: getStringFlag(parsed.flags, "bcc") || "" },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runDraftRead(parsed: ParsedCliArgs): Promise<void> {
+  const draftId = parsed.positionals[0] || getStringFlag(parsed.flags, "id");
+  if (!draftId) throw new Error("draft-read requires a draft id");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({ name: "get_draft", arguments: { draftId } });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runDraftUpdate(parsed: ParsedCliArgs): Promise<void> {
+  const draftId = parsed.positionals[0] || getStringFlag(parsed.flags, "id");
+  if (!draftId) throw new Error("draft-update requires a draft id");
+  let body = getStringFlag(parsed.flags, "body");
+  if (!body) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+    const text = Buffer.concat(chunks).toString("utf8").trim();
+    if (text) body = text;
+  }
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "update_draft",
+      arguments: {
+        draftId,
+        to: getStringFlag(parsed.flags, "to"),
+        cc: getStringFlag(parsed.flags, "cc"),
+        bcc: getStringFlag(parsed.flags, "bcc"),
+        subject: getStringFlag(parsed.flags, "subject"),
+        body: body || undefined,
+        notes: getStringFlag(parsed.flags, "notes"),
+      },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runDraftReply(parsed: ParsedCliArgs): Promise<void> {
+  const emailId = parsed.positionals[0] || getStringFlag(parsed.flags, "id");
+  if (!emailId) throw new Error("draft-reply requires an emailId");
+  let body = getStringFlag(parsed.flags, "body");
+  if (!body) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+    const text = Buffer.concat(chunks).toString("utf8").trim();
+    if (text) body = text;
+  }
+  if (!body) throw new Error("draft-reply requires --body or body piped via stdin");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "create_reply_draft",
+      arguments: {
+        emailId,
+        body,
+        replyAll: isTruthyFlag(parsed.flags["reply-all"]) || isTruthyFlag(parsed.flags.all) || undefined,
+        cc: getStringFlag(parsed.flags, "cc"),
+        bcc: getStringFlag(parsed.flags, "bcc"),
+        notes: getStringFlag(parsed.flags, "notes"),
+      },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runDraftForward(parsed: ParsedCliArgs): Promise<void> {
+  const emailId = parsed.positionals[0] || getStringFlag(parsed.flags, "id");
+  const to = getStringFlag(parsed.flags, "to");
+  if (!emailId) throw new Error("draft-forward requires an emailId");
+  if (!to) throw new Error("draft-forward requires --to");
+  let body = getStringFlag(parsed.flags, "body");
+  if (!body) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+    const text = Buffer.concat(chunks).toString("utf8").trim();
+    if (text) body = text;
+  }
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "create_forward_draft",
+      arguments: { emailId, to, body: body || undefined, cc: getStringFlag(parsed.flags, "cc"), bcc: getStringFlag(parsed.flags, "bcc"), notes: getStringFlag(parsed.flags, "notes") },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runDraftSync(parsed: ParsedCliArgs): Promise<void> {
+  const draftId = parsed.positionals[0] || getStringFlag(parsed.flags, "id");
+  if (!draftId) throw new Error("draft-sync requires a draft id");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({ name: "sync_draft_to_remote", arguments: { draftId } });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runRemoteDrafts(parsed: ParsedCliArgs): Promise<void> {
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "list_remote_drafts",
+      arguments: { limit: getNumberFlag(parsed.flags, "limit", 50), offset: getNumberFlag(parsed.flags, "offset", 0) },
+    });
+    printToolCallResult(result as Record<string, unknown>, wantJson);
+  });
+}
+
+async function runDraftThreadReply(parsed: ParsedCliArgs): Promise<void> {
+  const threadId = parsed.positionals[0] || getStringFlag(parsed.flags, "id");
+  if (!threadId) throw new Error("draft-thread-reply requires a threadId");
+  let body = getStringFlag(parsed.flags, "body");
+  if (!body) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+    const text = Buffer.concat(chunks).toString("utf8").trim();
+    if (text) body = text;
+  }
+  if (!body) throw new Error("draft-thread-reply requires --body or body piped via stdin");
+  const wantJson = isTruthyFlag(parsed.flags.json);
+  await withMcpClient(async (client) => {
+    const result = await client.callTool({
+      name: "create_thread_reply_draft",
+      arguments: {
+        threadId,
+        body,
+        replyAll: isTruthyFlag(parsed.flags["reply-all"]) || isTruthyFlag(parsed.flags.all) || undefined,
+        cc: getStringFlag(parsed.flags, "cc"),
+        bcc: getStringFlag(parsed.flags, "bcc"),
+        notes: getStringFlag(parsed.flags, "notes"),
+      },
     });
     printToolCallResult(result as Record<string, unknown>, wantJson);
   });
@@ -1207,14 +1553,77 @@ export async function main(): Promise<void> {
     case "forward":
       await runForward(parsed);
       return;
+    case "emails":
+      await runEmails(parsed);
+      return;
+    case "thread":
+      await runThread(parsed);
+      return;
+    case "thread-brief":
+      await runThreadBrief(parsed);
+      return;
+    case "actionable":
+      await runActionable(parsed);
+      return;
+    case "document-threads":
+      await runDocumentThreads(parsed);
+      return;
+    case "meeting-context":
+      await runMeetingContext(parsed);
+      return;
+    case "thread-action":
+      await runThreadAction(parsed);
+      return;
+    case "batch":
+      await runBatch(parsed);
+      return;
+    case "stats":
+      await runStats(parsed);
+      return;
+    case "analytics":
+      await runAnalytics(parsed);
+      return;
+    case "contacts":
+      await runContacts(parsed);
+      return;
+    case "volume-trends":
+      await runVolumeTrends(parsed);
+      return;
+    case "watch":
+      await runWatch(parsed);
+      return;
+    case "test-email":
+      await runTestEmail(parsed);
+      return;
     case "draft-create":
       await runDraftCreate(parsed);
+      return;
+    case "draft-read":
+      await runDraftRead(parsed);
+      return;
+    case "draft-update":
+      await runDraftUpdate(parsed);
+      return;
+    case "draft-reply":
+      await runDraftReply(parsed);
+      return;
+    case "draft-forward":
+      await runDraftForward(parsed);
+      return;
+    case "draft-sync":
+      await runDraftSync(parsed);
       return;
     case "draft-send":
       await runDraftSend(parsed);
       return;
     case "draft-delete":
       await runDraftDelete(parsed);
+      return;
+    case "remote-drafts":
+      await runRemoteDrafts(parsed);
+      return;
+    case "draft-thread-reply":
+      await runDraftThreadReply(parsed);
       return;
     case "tools":
       await runTools(parsed);
