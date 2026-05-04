@@ -85,7 +85,7 @@ const ALL_EMAIL_ACTIONS: EmailAction[] = [
 const TOOLS = [
   {
     name: "send_email",
-    description: "Send an email through Proton SMTP with optional CC, BCC, reply-to, and attachments.",
+    description: "Compose and immediately send a new outbound email through Proton Bridge SMTP. Use for one-shot messages that need no review. Prefer create_draft when you want to save and review before sending, or reply_to_email when responding to an existing message. Fails if PROTONMAIL_ALLOW_SEND is false or if Bridge SMTP is unreachable. Returns delivery confirmation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -122,7 +122,7 @@ const TOOLS = [
   },
   {
     name: "send_test_email",
-    description: "Send a simple test email to validate SMTP connectivity.",
+    description: "Send a minimal diagnostic email to confirm Proton Bridge SMTP credentials and connectivity. Use before relying on send_email in a new environment. Prefer get_connection_status for a connectivity check that does not actually send mail. Returns transport debug info and delivery status.",
     inputSchema: {
       type: "object",
       properties: {
@@ -134,7 +134,7 @@ const TOOLS = [
   },
   {
     name: "reply_to_email",
-    description: "Reply to an email by its emailId, optionally replying to all recipients.",
+    description: "Immediately send a reply to an existing email, threading it correctly via In-Reply-To and References headers. Use when you have an emailId and want to send the reply right away. Prefer create_reply_draft to save the reply for review first, or create_thread_reply_draft when replying from a threadId. Requires PROTONMAIL_ALLOW_SEND.",
     inputSchema: {
       type: "object",
       properties: {
@@ -165,7 +165,7 @@ const TOOLS = [
   },
   {
     name: "forward_email",
-    description: "Forward an email by its emailId to one or more recipients.",
+    description: "Immediately forward an existing email to new recipients, preserving original attachments and prepending an optional note. Use when you have an emailId and want to re-route the message without review. Prefer create_forward_draft to stage a forward for review first. Requires PROTONMAIL_ALLOW_SEND.",
     inputSchema: {
       type: "object",
       properties: {
@@ -196,7 +196,7 @@ const TOOLS = [
   },
   {
     name: "create_draft",
-    description: "Create a local persistent draft that can later be reviewed, updated, or sent.",
+    description: "Save a new outbound message as a local draft in SQLite, optionally syncing it to the Proton Drafts IMAP folder. Use to compose and review before sending. Prefer create_reply_draft when replying to a specific emailId, or create_forward_draft when forwarding. Returns a draftId for later update, sync, or send via send_draft.",
     inputSchema: {
       type: "object",
       properties: {
@@ -235,7 +235,7 @@ const TOOLS = [
   },
   {
     name: "create_reply_draft",
-    description: "Create a reply draft for an existing email, optionally replying to all recipients.",
+    description: "Create a reply draft for a specific email, pre-filling To, Subject, and quoted body from the original message. Use when you have an emailId and want to stage the reply for review before sending. Prefer create_thread_reply_draft when you only have a threadId. Prefer reply_to_email to send immediately. Returns a draftId.",
     inputSchema: {
       type: "object",
       properties: {
@@ -272,7 +272,7 @@ const TOOLS = [
   },
   {
     name: "create_forward_draft",
-    description: "Create a forward draft for an existing email.",
+    description: "Create a forward draft for an existing email, pre-filling the original message as quoted body. Use when you have an emailId and want to stage a forward for review before sending. Prefer forward_email to send immediately without saving. Returns a draftId for later update or send via send_draft.",
     inputSchema: {
       type: "object",
       properties: {
@@ -309,7 +309,7 @@ const TOOLS = [
   },
   {
     name: "list_drafts",
-    description: "List local persistent drafts.",
+    description: "List all locally saved drafts with their status, subject, and timestamps. Use to review in-progress or unsent messages. Does NOT list drafts stored only on the Proton server — use list_remote_drafts for those. Prefer get_draft when you already have a draftId and need the full content.",
     inputSchema: {
       type: "object",
       properties: {
@@ -319,7 +319,7 @@ const TOOLS = [
   },
   {
     name: "list_remote_drafts",
-    description: "List drafts currently stored in the Proton Drafts mailbox.",
+    description: "List draft messages currently stored in the Proton Drafts IMAP folder on the server. Use to see drafts created via Proton webmail or mobile app that have not been synced locally. Prefer list_drafts to see drafts managed by this server. Requires an active IMAP connection.",
     inputSchema: {
       type: "object",
       properties: {
@@ -330,22 +330,22 @@ const TOOLS = [
   },
   {
     name: "get_draft",
-    description: "Get a single local persistent draft by id.",
+    description: "Fetch the full content of a single locally saved draft by its draftId. Use to read or verify a draft before sending or updating. Prefer list_drafts to discover draftIds first. Does NOT fetch drafts from the Proton server — use list_remote_drafts for those.",
     inputSchema: {
       type: "object",
       properties: {
-        draftId: { type: "string" },
+        draftId: { type: "string", description: "Draft id returned by create_draft, list_drafts, or a create_*_draft call." },
       },
       required: ["draftId"],
     },
   },
   {
     name: "update_draft",
-    description: "Update a local persistent draft.",
+    description: "Update an existing locally saved draft's recipients, subject, body, or other fields. Use to edit a draft before sending. Only provided fields are updated — omitted fields retain their current values. After updating, call send_draft to send or sync_draft_to_remote to push to Proton Drafts.",
     inputSchema: {
       type: "object",
       properties: {
-        draftId: { type: "string" },
+        draftId: { type: "string", description: "Draft id returned by create_draft, list_drafts, or a create_*_draft call." },
         to: { type: "string", description: "Recipient email addresses, comma-separated." },
         cc: { type: "string", description: "CC recipient email addresses, comma-separated." },
         bcc: { type: "string", description: "BCC recipient email addresses, comma-separated." },
@@ -381,40 +381,40 @@ const TOOLS = [
   },
   {
     name: "sync_draft_to_remote",
-    description: "Force a local draft to sync into the Proton Drafts mailbox and return the remote draft reference.",
+    description: "Force-push a locally saved draft to the Proton Drafts IMAP folder and return the remote UID. Use when a draft was created with syncToRemote:false or when the automatic sync failed. Do NOT use this if PROTONMAIL_ALLOW_REMOTE_DRAFT_SYNC is false — the call will be rejected.",
     inputSchema: {
       type: "object",
       properties: {
-        draftId: { type: "string" },
+        draftId: { type: "string", description: "Draft id returned by create_draft, list_drafts, or a create_*_draft call." },
       },
       required: ["draftId"],
     },
   },
   {
     name: "send_draft",
-    description: "Send a previously created draft through Proton SMTP.",
+    description: "Send a previously saved local draft through Proton Bridge SMTP. Use as the final step in a draft-review-send workflow after create_draft and optional update_draft. Marks the draft as sent in the local store but does not delete it. Requires PROTONMAIL_ALLOW_SEND.",
     inputSchema: {
       type: "object",
       properties: {
-        draftId: { type: "string" },
+        draftId: { type: "string", description: "Draft id returned by create_draft, list_drafts, or a create_*_draft call." },
       },
       required: ["draftId"],
     },
   },
   {
     name: "delete_draft",
-    description: "Delete a local persistent draft.",
+    description: "Permanently delete a locally saved draft from SQLite. Use to discard a draft you no longer need. Does NOT remove a matching draft from the Proton Drafts IMAP folder — that requires a separate mailbox action. Irreversible.",
     inputSchema: {
       type: "object",
       properties: {
-        draftId: { type: "string" },
+        draftId: { type: "string", description: "Draft id returned by create_draft, list_drafts, or a create_*_draft call." },
       },
       required: ["draftId"],
     },
   },
   {
     name: "get_emails",
-    description: "Fetch emails from a folder. Results are returned newest first.",
+    description: "Fetch emails from a mailbox folder via live IMAP, returned newest first. Use to browse or paginate recent messages in a specific folder. Prefer search_emails to filter by sender, subject, or date. Prefer search_indexed_emails for fast repeated queries when the local SQLite index is populated and Bridge availability is uncertain.",
     inputSchema: {
       type: "object",
       properties: {
@@ -426,7 +426,7 @@ const TOOLS = [
   },
   {
     name: "get_email_by_id",
-    description: "Fetch a full email by the emailId returned from get_emails or search_emails.",
+    description: "Fetch the full content of a single email using a composite emailId. Use after get_emails or search_emails to read a specific message in full. The emailId format is FOLDER::UID — always use the id returned by a prior tool call; do not construct it manually.",
     inputSchema: {
       type: "object",
       properties: {
@@ -437,7 +437,7 @@ const TOOLS = [
   },
   {
     name: "search_emails",
-    description: "Search emails using IMAP filters and optional local attachment filtering.",
+    description: "Search emails via live IMAP filters with optional local post-processing for attachments and labels. Use when you need real-time results or must search messages not yet in the local index. Prefer search_indexed_emails when the index is populated — it is significantly faster and works even when Bridge IMAP is unavailable.",
     inputSchema: {
       type: "object",
       properties: {
@@ -460,18 +460,18 @@ const TOOLS = [
   },
   {
     name: "get_folders",
-    description: "List folders with message counts and unseen counts.",
+    description: "Return all mailbox folders with message counts and unseen counts from the live IMAP session. Use to discover available folder names before targeting get_emails, move_email, or create_folder. Prefer sync_folders to force a fresh fetch when the folder list appears stale.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "sync_folders",
-    description: "Refresh folder metadata from the IMAP server.",
+    description: "Refresh the in-memory folder list from the IMAP server and return the updated list. Use when folders have been created, renamed, or deleted externally (e.g. via Proton webmail) and get_folders is returning stale data. Prefer get_folders for a read-only view that does not force a refresh.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "create_folder",
     description:
-      "Create a mailbox folder. Use the IMAP path delimiter (usually '/') for nesting, e.g. 'Folders/Receipts'.",
+      "Create a new mailbox folder via IMAP. Use 'Folders/' prefix for user folders and 'Labels/' for labels in Proton Bridge (e.g. 'Folders/Receipts'). Do NOT attempt to create system folders such as INBOX, Sent, Trash, Archive, or Spam. Returns the created path on success.",
     inputSchema: {
       type: "object",
       properties: {
@@ -486,7 +486,7 @@ const TOOLS = [
   },
   {
     name: "rename_folder",
-    description: "Rename or move a mailbox folder.",
+    description: "Rename or move a mailbox folder to a new IMAP path. Existing messages are preserved in place. Do NOT rename system folders (INBOX, Sent, Trash, Archive, Spam). Refreshes the local folder cache after the operation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -499,7 +499,7 @@ const TOOLS = [
   {
     name: "delete_folder",
     description:
-      "Delete a mailbox folder. The folder must be empty in Proton Bridge — move or trash messages first.",
+      "Delete an empty mailbox folder via IMAP. The folder must contain no messages — move or trash all messages first. Do NOT delete system folders (INBOX, Sent, Trash, Archive, Spam). Irreversible; messages already removed cannot be recovered this way.",
     inputSchema: {
       type: "object",
       properties: {
@@ -510,11 +510,11 @@ const TOOLS = [
   },
   {
     name: "mark_email_read",
-    description: "Mark an email as read or unread.",
+    description: "Mark a single email as read or unread by setting the IMAP Seen flag. Use for individual triage or to reset read state. Prefer batch_email_action with action 'mark_read' or 'mark_unread' when updating multiple emails at once.",
     inputSchema: {
       type: "object",
       properties: {
-        emailId: { type: "string" },
+        emailId: { type: "string", description: "Composite email id in FOLDER::UID format, as returned by get_emails or search_emails." },
         isRead: { type: "boolean", default: true },
       },
       required: ["emailId"],
@@ -522,11 +522,11 @@ const TOOLS = [
   },
   {
     name: "star_email",
-    description: "Star or unstar an email.",
+    description: "Star or unstar a single email using the IMAP Flagged flag. Use to bookmark an important message for later follow-up. Prefer batch_email_action with action 'star' or 'unstar' when flagging multiple emails at once.",
     inputSchema: {
       type: "object",
       properties: {
-        emailId: { type: "string" },
+        emailId: { type: "string", description: "Composite email id in FOLDER::UID format, as returned by get_emails or search_emails." },
         isStarred: { type: "boolean", default: true },
       },
       required: ["emailId"],
@@ -534,11 +534,11 @@ const TOOLS = [
   },
   {
     name: "move_email",
-    description: "Move an email to another folder.",
+    description: "Move a single email to any specified mailbox folder. Use when routing a message to a custom folder. Prefer archive_email to move to the standard Archive folder, or trash_email to move to Trash. Use get_folders first to confirm the target folder path.",
     inputSchema: {
       type: "object",
       properties: {
-        emailId: { type: "string" },
+        emailId: { type: "string", description: "Composite email id in FOLDER::UID format, as returned by get_emails or search_emails." },
         targetFolder: { type: "string" },
       },
       required: ["emailId", "targetFolder"],
@@ -546,33 +546,33 @@ const TOOLS = [
   },
   {
     name: "archive_email",
-    description: "Move an email to the archive folder.",
+    description: "Move a single email to the standard Archive folder. Use for messages that are resolved but worth keeping long-term. Prefer trash_email when the message is no longer needed. Prefer move_email to route to a custom folder. Prefer batch_email_action for archiving multiple emails at once.",
     inputSchema: {
       type: "object",
       properties: {
-        emailId: { type: "string" },
+        emailId: { type: "string", description: "Composite email id in FOLDER::UID format, as returned by get_emails or search_emails." },
       },
       required: ["emailId"],
     },
   },
   {
     name: "trash_email",
-    description: "Move an email to the trash folder instead of permanently deleting it.",
+    description: "Move a single email to the Trash folder. Messages in Trash can be recovered with restore_email. Use instead of delete_email when you may want to recover the message later. Prefer batch_email_action with action 'trash' for multiple emails at once.",
     inputSchema: {
       type: "object",
       properties: {
-        emailId: { type: "string" },
+        emailId: { type: "string", description: "Composite email id in FOLDER::UID format, as returned by get_emails or search_emails." },
       },
       required: ["emailId"],
     },
   },
   {
     name: "restore_email",
-    description: "Restore an email to INBOX or to a target folder.",
+    description: "Move an email from Trash back to INBOX or to a specified folder. Use to undo a trash_email operation. Does not work on permanently deleted messages — only messages currently in Trash can be restored.",
     inputSchema: {
       type: "object",
       properties: {
-        emailId: { type: "string" },
+        emailId: { type: "string", description: "Composite email id in FOLDER::UID format, as returned by get_emails or search_emails." },
         targetFolder: { type: "string", description: "Optional restore destination. Defaults to INBOX." },
       },
       required: ["emailId"],
@@ -580,18 +580,18 @@ const TOOLS = [
   },
   {
     name: "delete_email",
-    description: "Delete an email from its current folder.",
+    description: "Permanently delete an email from its current folder via IMAP expunge. Use only when certain the message is no longer needed. Prefer trash_email if recovery may be required. Irreversible — the message cannot be recovered after deletion.",
     inputSchema: {
       type: "object",
       properties: {
-        emailId: { type: "string" },
+        emailId: { type: "string", description: "Composite email id in FOLDER::UID format, as returned by get_emails or search_emails." },
       },
       required: ["emailId"],
     },
   },
   {
     name: "batch_email_action",
-    description: "Apply a reversible mailbox action to multiple email ids in one call.",
+    description: "Apply a reversible mailbox action to multiple emails in a single IMAP call. Use when you have a set of emailIds to act on at once (mark_read, mark_unread, star, unstar, archive, trash, restore). Supports dryRun to preview impact before mutating. Prefer apply_thread_action when acting by threadId rather than individual email ids.",
     inputSchema: {
       type: "object",
       properties: {
@@ -632,7 +632,7 @@ const TOOLS = [
   {
     name: "apply_thread_action",
     description:
-      "Apply a reversible mailbox action to every message in a normalized thread, optionally limited to unread messages.",
+      "Apply a reversible mailbox action to every message in a normalized thread at once. Use when you want to act on a full thread identified by threadId (e.g. archive or mark-read an entire conversation). Supports dryRun, unreadOnly to scope impact, and syncBefore to refresh the index first. Prefer batch_email_action when you have explicit emailIds rather than a threadId.",
     inputSchema: {
       type: "object",
       properties: {
@@ -671,17 +671,17 @@ const TOOLS = [
   },
   {
     name: "get_email_stats",
-    description: "Summarize mailbox counts and a recent analytics sample.",
+    description: "Return aggregate mailbox statistics: folder message counts, total unread counts, and a brief analytics sample. Use for a quick mailbox health overview. Prefer get_email_analytics for richer breakdowns such as top senders and hourly patterns. Prefer get_volume_trends for time-series daily volume data.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "get_email_analytics",
-    description: "Generate sampled mailbox analytics such as top senders and busiest hours.",
+    description: "Generate sampled mailbox analytics including top senders, busiest hours of day, and volume breakdown by folder. Use for productivity insights and communication pattern analysis. Prefer get_email_stats for a fast aggregate count summary. Prefer get_volume_trends for per-day message volume history.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "get_contacts",
-    description: "List contacts ranked by interaction volume in the sampled analytics window.",
+    description: "Return the most frequently contacted email addresses ranked by interaction volume within the analytics sample window. Use to identify key correspondents or to pre-populate recipient lists. Requires the local mailbox index to be populated — call sync_emails first if the index is empty.",
     inputSchema: {
       type: "object",
       properties: {
@@ -691,7 +691,7 @@ const TOOLS = [
   },
   {
     name: "get_volume_trends",
-    description: "Return daily message counts for a recent window.",
+    description: "Return daily inbound and outbound message counts for a trailing window. Use to spot volume spikes, identify quiet periods, or track communication trends over time. Prefer get_email_analytics for sender-level breakdowns and hourly patterns.",
     inputSchema: {
       type: "object",
       properties: {
@@ -701,17 +701,17 @@ const TOOLS = [
   },
   {
     name: "get_connection_status",
-    description: "Verify SMTP and IMAP availability.",
+    description: "Check whether Proton Bridge SMTP and IMAP are reachable and return authentication status for each. Use to diagnose connectivity before sending or syncing, or when tools return connection errors. Returns individual pass/fail for each protocol. Prefer run_doctor for a full end-to-end health check including index integrity.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "get_runtime_status",
-    description: "Return runtime policy, background sync and IDLE state, draft stats, and local index freshness.",
+    description: "Return the server's current runtime state: policy flags (read-only, allow-send, allowed actions), background sync schedule and last-run time, IMAP IDLE watch state, draft store statistics, and local index freshness. Use to understand how the server is configured and whether sync is actively running. Prefer get_connection_status for protocol reachability only.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "run_doctor",
-    description: "Run a production health check for SMTP, IMAP, IDLE, SQLite index integrity, and runtime policy.",
+    description: "Run a comprehensive production health check covering SMTP auth, IMAP auth, optional IMAP IDLE probe, SQLite index integrity, and runtime policy validation. Use to fully diagnose or validate the setup. Prefer get_connection_status for a quick protocol-only reachability check.",
     inputSchema: {
       type: "object",
       properties: {
@@ -732,12 +732,12 @@ const TOOLS = [
   },
   {
     name: "run_background_sync",
-    description: "Trigger the configured background mailbox sync immediately and return its updated status.",
+    description: "Immediately trigger the configured background mailbox sync cycle outside its normal schedule and return its updated status. Use to force a sync when the index may be stale. Does nothing useful if PROTONMAIL_AUTO_SYNC is disabled. Prefer sync_emails for an on-demand, configurable sync with folder and depth options.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "wait_for_mailbox_changes",
-    description: "Wait briefly on IMAP IDLE and report whether mailbox change events were observed.",
+    description: "Open an IMAP IDLE session and block until a mailbox change event arrives or the timeout expires. Use to detect real-time inbox activity without polling. Returns whether a change was observed. Always has a hard timeout (default 15s) to avoid blocking indefinitely — do not use in fire-and-forget pipelines.",
     inputSchema: {
       type: "object",
       properties: {
@@ -748,7 +748,7 @@ const TOOLS = [
   },
   {
     name: "sync_emails",
-    description: "Incrementally sync emails and persist the local v3 mailbox index on disk, using checkpoints when available.",
+    description: "Incrementally sync email metadata from IMAP into the local SQLite index, using stored checkpoints to avoid re-fetching already-indexed messages. Use before calling search_indexed_emails or get_threads when the index may be stale. Set full:true for a larger initial sample. Prefer run_background_sync to trigger the scheduled sync cycle.",
     inputSchema: {
       type: "object",
       properties: {
@@ -765,13 +765,13 @@ const TOOLS = [
   },
   {
     name: "get_index_status",
-    description: "Return status for the persistent on-disk mailbox index.",
+    description: "Return metadata about the local SQLite email index: row count, last sync timestamp, index schema version, and per-folder coverage. Use to verify the index is fresh and complete before querying it with search_indexed_emails or get_threads. If the index is empty or stale, call sync_emails first.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "search_indexed_emails",
     description:
-      "Search the persistent on-disk mailbox index without hitting IMAP. Supports shortcuts like from:, to:, subject:, label:, and domain: inside the query.",
+      "Search the local SQLite mailbox index without making any IMAP connection. Supports free-text and field shortcuts inline: from:alice@example.com, to:bob, subject:invoice, label:Archive, domain:acme.com. Use for fast, offline-capable searches when the index is populated. Prefer search_emails when you need live IMAP results or when the index is stale or empty.",
     inputSchema: {
       type: "object",
       properties: {
@@ -796,7 +796,7 @@ const TOOLS = [
   },
   {
     name: "get_labels",
-    description: "Return normalized Proton folder and label views from the local mailbox index.",
+    description: "Return normalized Proton folders and labels from the local mailbox index, including message counts per label. Use to enumerate available labels before filtering with search_indexed_emails or get_threads. Prefer get_folders for live IMAP folder counts when the index may be stale.",
     inputSchema: {
       type: "object",
       properties: {
@@ -806,7 +806,7 @@ const TOOLS = [
   },
   {
     name: "get_threads",
-    description: "Return normalized mailbox threads from the local mailbox index.",
+    description: "Return normalized email threads from the local mailbox index, grouping individual messages into conversations by subject and participants. Use to view mail as threads rather than individual messages. Prefer get_actionable_threads when you want threads prioritized by reply urgency. Prefer get_inbox_digest for an executive-summary view.",
     inputSchema: {
       type: "object",
       properties: {
@@ -819,7 +819,7 @@ const TOOLS = [
   {
     name: "get_actionable_threads",
     description:
-      "Return the most actionable mailbox threads, ranked for reply triage with pending-on-you status.",
+      "Return mailbox threads ranked by reply urgency, filtered to those requiring action. Use for daily triage to surface what needs a response from you. Supports pendingOn filter to distinguish threads waiting on you vs. them. Prefer get_inbox_digest for a broader summary including stale items. Prefer get_threads for an unranked thread list.",
     inputSchema: {
       type: "object",
       properties: {
@@ -847,7 +847,7 @@ const TOOLS = [
   },
   {
     name: "get_inbox_digest",
-    description: "Return a structured inbox digest with counts, top actionable threads, and stale waiting-on-you threads.",
+    description: "Return a structured inbox summary: unread counts, top actionable threads, and overdue threads where a reply is pending from you. Use as the starting point for an inbox review session to get an at-a-glance picture. Prefer get_actionable_threads for a deeper, filterable list of threads needing action.",
     inputSchema: {
       type: "object",
       properties: {
@@ -867,7 +867,7 @@ const TOOLS = [
   },
   {
     name: "get_follow_up_candidates",
-    description: "Return threads that look like follow-up candidates based on age and pending-on state.",
+    description: "Return threads that appear overdue for follow-up based on age and pending-on state. Use when looking for outbound messages you sent that haven't received a reply, or to surface stale inbound threads. Prefer get_actionable_threads for threads where someone is currently waiting on you.",
     inputSchema: {
       type: "object",
       properties: {
@@ -889,7 +889,7 @@ const TOOLS = [
   },
   {
     name: "find_document_threads",
-    description: "Find threads that likely contain important attachments such as invoices, contracts, travel docs, or calendar invites.",
+    description: "Find email threads likely containing important document attachments such as invoices, contracts, travel confirmations, or calendar invites. Use to locate attachment-heavy threads by category without knowing the exact sender or subject. Prefer search_indexed_emails with hasAttachment:true for custom attachment queries beyond the built-in categories.",
     inputSchema: {
       type: "object",
       properties: {
@@ -911,7 +911,7 @@ const TOOLS = [
   },
   {
     name: "prepare_meeting_context",
-    description: "Pull recent threads and latest inbound context for a person or company domain before a meeting.",
+    description: "Fetch recent threads and communication history for a person or company domain to prepare for a meeting or call. Use before a scheduled meeting to surface relevant recent correspondence. Provide at least one of person (name or email fragment) or domain. Returns matched threads sorted by recency.",
     inputSchema: {
       type: "object",
       properties: {
@@ -928,7 +928,7 @@ const TOOLS = [
   },
   {
     name: "get_thread_brief",
-    description: "Summarize a normalized thread with the latest inbound, latest outbound, attachments, and likely next action.",
+    description: "Return a summarized view of a single thread: latest inbound message preview, latest outbound preview, attachment list, and a recommended next action. Use for a quick status check on a specific thread without reading every message. Prefer get_thread_by_id when you need the full raw thread data and all messages.",
     inputSchema: {
       type: "object",
       properties: {
@@ -939,7 +939,7 @@ const TOOLS = [
   },
   {
     name: "get_thread_by_id",
-    description: "Fetch a normalized mailbox thread from the local mailbox index.",
+    description: "Fetch the complete normalized thread record from the local index, including all messages, participants, labels, and full metadata. Use when you need all messages in a thread. Prefer get_thread_brief for a summarized quick view that avoids returning the full message list.",
     inputSchema: {
       type: "object",
       properties: {
@@ -951,7 +951,7 @@ const TOOLS = [
   {
     name: "create_thread_reply_draft",
     description:
-      "Create a reply draft from a normalized thread id, choosing the latest inbound message by default.",
+      "Create a reply draft from a threadId, automatically selecting the latest inbound message to reply to. Use when you have a threadId from get_threads or get_actionable_threads and want to stage a reply for review. Prefer create_reply_draft when you already have a specific emailId. Returns a draftId for later update or send.",
     inputSchema: {
       type: "object",
       properties: {
@@ -998,11 +998,11 @@ const TOOLS = [
   },
   {
     name: "list_attachments",
-    description: "List attachments for a specific email, with stable attachment ids.",
+    description: "List all attachments on a specific email with stable attachmentIds, filenames, content types, and sizes. Use before calling get_attachment_content or save_attachment to discover what attachments are available and get their IDs. Prefer save_attachments when you want to download all attachments at once.",
     inputSchema: {
       type: "object",
       properties: {
-        emailId: { type: "string" },
+        emailId: { type: "string", description: "Composite email id in FOLDER::UID format, as returned by get_emails or search_emails." },
         includeInline: { type: "boolean", description: "Include inline attachments.", default: true },
         filenameContains: { type: "string", description: "Optional filename substring filter." },
         contentType: { type: "string", description: "Optional exact content type filter." },
@@ -1012,12 +1012,12 @@ const TOOLS = [
   },
   {
     name: "get_attachment_content",
-    description: "Fetch attachment metadata and optionally inline base64 content.",
+    description: "Fetch metadata for a specific email attachment and optionally return its base64-encoded content inline. Use when you need to read or process attachment data in-memory. Set includeBase64:false (default) to retrieve metadata only without loading the full payload. Prefer save_attachment to write the file to disk instead.",
     inputSchema: {
       type: "object",
       properties: {
-        emailId: { type: "string" },
-        attachmentId: { type: "string" },
+        emailId: { type: "string", description: "Composite email id in FOLDER::UID format, as returned by get_emails or search_emails." },
+        attachmentId: { type: "string", description: "Stable attachment id returned by list_attachments." },
         includeBase64: { type: "boolean", description: "Include base64 payload in the response.", default: false },
       },
       required: ["emailId", "attachmentId"],
@@ -1025,11 +1025,11 @@ const TOOLS = [
   },
   {
     name: "save_attachments",
-    description: "Save multiple attachments from an email to disk with optional filters.",
+    description: "Save all qualifying attachments from an email to a directory on disk, with optional filename substring or content-type filters. Use to batch-download attachments from a single email. Returns the list of written file paths. Prefer save_attachment when you need to save one specific attachment by its attachmentId.",
     inputSchema: {
       type: "object",
       properties: {
-        emailId: { type: "string" },
+        emailId: { type: "string", description: "Composite email id in FOLDER::UID format, as returned by get_emails or search_emails." },
         outputPath: { type: "string", description: "Optional target directory or file path." },
         includeInline: { type: "boolean", description: "Include inline attachments.", default: false },
         filenameContains: { type: "string", description: "Optional filename substring filter." },
@@ -1040,12 +1040,12 @@ const TOOLS = [
   },
   {
     name: "save_attachment",
-    description: "Save an email attachment to disk and return the written path.",
+    description: "Save a single email attachment to disk by its attachmentId and return the written file path. Use when you have a specific attachmentId from list_attachments and want to write that file. Prefer save_attachments to save all or filtered attachments from an email without needing individual attachment IDs.",
     inputSchema: {
       type: "object",
       properties: {
-        emailId: { type: "string" },
-        attachmentId: { type: "string" },
+        emailId: { type: "string", description: "Composite email id in FOLDER::UID format, as returned by get_emails or search_emails." },
+        attachmentId: { type: "string", description: "Stable attachment id returned by list_attachments." },
         outputPath: { type: "string", description: "Optional file or directory path to write to." },
       },
       required: ["emailId", "attachmentId"],
@@ -1053,17 +1053,17 @@ const TOOLS = [
   },
   {
     name: "clear_cache",
-    description: "Clear in-memory folder, message, and analytics caches.",
+    description: "Evict all in-memory caches: folder list, message metadata, and analytics data. Use when cached data appears stale after external mailbox changes (e.g. folders modified via Proton webmail). Does NOT affect the persistent SQLite index — use clear_index for that.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "clear_index",
-    description: "Delete the persistent on-disk mailbox index.",
+    description: "Delete the entire persistent SQLite mailbox index from disk. Use only to reset a corrupted or schema-incompatible index. After clearing, call sync_emails to rebuild. Irreversible — all indexed metadata and search history is lost. Does NOT clear in-memory caches — use clear_cache for that.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "get_logs",
-    description: "Return recent in-memory server logs.",
+    description: "Return recent in-memory server log entries, filterable by level (debug, info, warn, error). Use to diagnose unexpected tool behavior or connection errors during the current session. Logs are ephemeral and not persisted across server restarts — use get_audit_logs for a persistent audit trail of write operations.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1074,7 +1074,7 @@ const TOOLS = [
   },
   {
     name: "get_audit_logs",
-    description: "Return recent persistent audit log entries for production review.",
+    description: "Return recent entries from the persistent on-disk audit log of all write operations performed by this server. Use to review what mutations (sends, moves, deletes, draft operations) were executed across sessions. Prefer get_logs for debugging in-session behavior and transient connection errors.",
     inputSchema: {
       type: "object",
       properties: {
